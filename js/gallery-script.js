@@ -212,18 +212,30 @@ function createPhotoElement(photo, index) {
     photoElement.className = 'photo-item';
     photoElement.setAttribute('data-index', index);
     
+    // Get current rating for this photo (from localStorage)
+    const currentRating = getPhotoRating(photo.image || photo.thumbnail || `photo_${index}`);
+    
     photoElement.innerHTML = `
         <img src="${photo.thumbnail || photo.image}" alt="${photo.title}" loading="lazy">
         <div class="photo-overlay">
             <div class="photo-info">
             </div>
         </div>
+        <div class="photo-rating">
+            <div class="star-rating" data-photo-id="${photo.image || photo.thumbnail || `photo_${index}`}">
+                ${generateStarHTML(currentRating)}
+            </div>
+        </div>
     `;
     
-    // Add click event to open full-screen viewer
-    photoElement.addEventListener('click', () => {
+    // Add click event to open full-screen viewer (only for the image, not the rating area)
+    const img = photoElement.querySelector('img');
+    img.addEventListener('click', () => {
         openFullscreenViewer(index);
     });
+    
+    // Add star rating click handlers
+    setupStarRating(photoElement);
     
     return photoElement;
 }
@@ -255,6 +267,9 @@ function openFullscreenViewer(index) {
     currentPhotoIndex.textContent = index + 1;
     totalPhotos.textContent = currentGalleryPhotos.length;
     
+    // Update fullscreen star rating
+    updateFullscreenRating(photo);
+    
     // Show full-screen viewer
     fullscreenViewer.classList.add('active');
     document.body.style.overflow = 'hidden'; // Prevent background scrolling
@@ -276,6 +291,65 @@ function showNextPhoto() {
         openFullscreenViewer(currentPhotoIndexValue + 1);
     }
 }
+
+function updateFullscreenRating(photo) {
+    const fullscreenStarRating = document.getElementById('fullscreenStarRating');
+    const photoId = photo.image || photo.thumbnail || `photo_${currentPhotoIndexValue}`;
+    const currentRating = getPhotoRating(photoId);
+    
+    // Generate stars HTML
+    fullscreenStarRating.innerHTML = generateStarHTML(currentRating);
+    fullscreenStarRating.setAttribute('data-photo-id', photoId);
+    
+    // Setup event listeners for fullscreen stars
+    setupFullscreenStarRating(fullscreenStarRating, photoId);
+}
+
+function setupFullscreenStarRating(starRatingElement, photoId) {
+    const stars = starRatingElement.querySelectorAll('.star');
+    
+    stars.forEach((star, index) => {
+        // Hover effect
+        star.addEventListener('mouseenter', () => {
+            highlightStars(stars, index + 1);
+        });
+        
+        // Click to rate
+        star.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const rating = index + 1;
+            const currentRating = getPhotoRating(photoId);
+            
+            // If clicking the same star again, unrate (set to 0)
+            const newRating = (currentRating === rating) ? 0 : rating;
+            
+            setPhotoRating(photoId, newRating);
+            updateStarDisplay(stars, newRating);
+            
+            // Also update the corresponding gallery star rating
+            updateGalleryStarRating(photoId, newRating);
+            
+            // Feedback removed - no popup needed
+        });
+    });
+    
+    // Reset hover effect when leaving the rating area
+    starRatingElement.addEventListener('mouseleave', () => {
+        const currentRating = getPhotoRating(photoId);
+        updateStarDisplay(stars, currentRating);
+    });
+}
+
+function updateGalleryStarRating(photoId, rating) {
+    // Find and update the corresponding gallery star rating
+    const galleryStarRating = document.querySelector(`[data-photo-id="${photoId}"]`);
+    if (galleryStarRating && galleryStarRating !== document.getElementById('fullscreenStarRating')) {
+        const galleryStars = galleryStarRating.querySelectorAll('.star');
+        updateStarDisplay(galleryStars, rating);
+    }
+}
+
+// Fullscreen feedback function removed - no popups needed
 
 // Setup full-screen viewer event listeners
 function setupFullscreenViewer() {
@@ -327,6 +401,84 @@ async function init() {
     setupNavigation();
     setupFullscreenViewer();
 }
+
+// Star Rating Functions
+function generateStarHTML(rating = 0) {
+    let starsHTML = '';
+    for (let i = 1; i <= 5; i++) {
+        const filled = i <= rating ? 'filled' : '';
+        starsHTML += `<span class="star ${filled}" data-rating="${i}">★</span>`;
+    }
+    return starsHTML;
+}
+
+function getPhotoRating(photoId) {
+    const ratings = JSON.parse(localStorage.getItem('photoRatings') || '{}');
+    return ratings[photoId] || 0;
+}
+
+function setPhotoRating(photoId, rating) {
+    const ratings = JSON.parse(localStorage.getItem('photoRatings') || '{}');
+    ratings[photoId] = rating;
+    localStorage.setItem('photoRatings', JSON.stringify(ratings));
+}
+
+function setupStarRating(photoElement) {
+    const starRating = photoElement.querySelector('.star-rating');
+    const stars = starRating.querySelectorAll('.star');
+    const photoId = starRating.getAttribute('data-photo-id');
+    
+    stars.forEach((star, index) => {
+        // Hover effect
+        star.addEventListener('mouseenter', () => {
+            highlightStars(stars, index + 1);
+        });
+        
+        // Click to rate
+        star.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent opening fullscreen viewer
+            const rating = index + 1;
+            const currentRating = getPhotoRating(photoId);
+            
+            // If clicking the same star again, unrate (set to 0)
+            const newRating = (currentRating === rating) ? 0 : rating;
+            
+            setPhotoRating(photoId, newRating);
+            updateStarDisplay(stars, newRating);
+            
+            // Feedback removed - no popup needed
+        });
+    });
+    
+    // Reset hover effect when leaving the rating area
+    starRating.addEventListener('mouseleave', () => {
+        const currentRating = getPhotoRating(photoId);
+        updateStarDisplay(stars, currentRating);
+    });
+}
+
+function highlightStars(stars, rating) {
+    stars.forEach((star, index) => {
+        if (index < rating) {
+            star.classList.add('hovered');
+        } else {
+            star.classList.remove('hovered');
+        }
+    });
+}
+
+function updateStarDisplay(stars, rating) {
+    stars.forEach((star, index) => {
+        star.classList.remove('hovered');
+        if (index < rating) {
+            star.classList.add('filled');
+        } else {
+            star.classList.remove('filled');
+        }
+    });
+}
+
+// Gallery feedback function removed - no popups needed
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', init); 

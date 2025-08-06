@@ -615,3 +615,7 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style); 
+
+document.addEventListener('dragstart', function(e) {
+    e.preventDefault();
+});
