@@ -239,23 +239,33 @@ async function init() {
     setupFilters();
     setupNavigation();
     setupSmoothScrolling();
-    setupRealTimeUpdates();
+    // setupRealTimeUpdates(); // Temporarily disabled to prevent conflicts
 }
 
 // Setup real-time updates from admin panel
 function setupRealTimeUpdates() {
-    // Check for updates every 2 seconds
-    setInterval(checkForUpdates, 2000);
-    
-    // Also check when the page becomes visible (user switches back to tab)
-    document.addEventListener('visibilitychange', function() {
-        if (!document.hidden) {
-            checkForUpdates();
-        }
-    });
-    
-    // Check for updates when window gains focus
-    window.addEventListener('focus', checkForUpdates);
+    // Wait 10 seconds after page load before starting real-time updates
+    // This prevents conflicts with initial loading
+    setTimeout(() => {
+        console.log('Starting real-time updates...');
+        
+        // Check for updates every 5 seconds (increased from 2 seconds)
+        setInterval(checkForUpdates, 5000);
+        
+        // Also check when the page becomes visible (user switches back to tab)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                // Add small delay to prevent conflicts
+                setTimeout(checkForUpdates, 1000);
+            }
+        });
+        
+        // Check for updates when window gains focus
+        window.addEventListener('focus', () => {
+            // Add small delay to prevent conflicts
+            setTimeout(checkForUpdates, 1000);
+        });
+    }, 10000); // Wait 10 seconds before starting
 }
 
 // Check if there are new photos or galleries
@@ -277,8 +287,12 @@ async function checkForUpdates() {
                 const newMetadata = await response.json();
                 const lastUpdate = localStorage.getItem('lastS3Update');
                 
+                console.log('Metadata lastUpdated:', newMetadata.lastUpdated);
+                console.log('Stored lastS3Update:', lastUpdate);
+                
                 // Check if metadata has been updated since last fetch
-                if (newMetadata.lastUpdated !== lastUpdate) {
+                // Only update if we have a stored timestamp AND it's different
+                if (lastUpdate && newMetadata.lastUpdated && newMetadata.lastUpdated !== lastUpdate) {
                     console.log('Detected updated metadata, refreshing galleries...');
                     
                     // Convert gallerySummaries to gallery format
