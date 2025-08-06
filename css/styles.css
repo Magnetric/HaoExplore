@@ -99,6 +99,8 @@ body {
 
 /* Hero Section */
 .hero {
+    /* Fallback background for better GitHub Pages compatibility */
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     background-image: url('../images/DSC_1619.avif');  /* 指向你的照片路径 */
     background-size: cover;           /* 让图片铺满整个区域 */
     background-position: center;      /* 居中显示图片 */
