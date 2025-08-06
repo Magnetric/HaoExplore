@@ -1,4 +1,4 @@
-// Load photos from localStorage or use default sample data
+// Load photos from localStorage
 let photos = [];
 
 function loadPhotosFromStorage() {
@@ -6,57 +6,7 @@ function loadPhotosFromStorage() {
     if (savedPhotos) {
         photos = JSON.parse(savedPhotos);
     } else {
-        // Default sample photos if no saved data
-        photos = [
-            {
-                id: 1,
-                title: "Mountain Sunrise",
-                location: "Swiss Alps",
-                year: 2024,
-                image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&h=800&fit=crop",
-                description: "Early morning light over the Swiss Alps. The golden hour creates a magical atmosphere as the sun rises behind the snow-capped peaks, casting long shadows across the pristine landscape."
-            },
-            {
-                id: 2,
-                title: "City Streets",
-                location: "New York",
-                year: 2023,
-                image: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=1200&h=800&fit=crop",
-                description: "Urban life in the city that never sleeps. The bustling streets of New York capture the energy and diversity of one of the world's most iconic cities."
-            },
-            {
-                id: 3,
-                title: "Ocean Waves",
-                location: "Hawaii",
-                year: 2023,
-                image: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&h=800&fit=crop",
-                description: "Crystal clear waters of the Pacific. The turquoise waves crash against the volcanic rocks, creating a mesmerizing display of nature's power and beauty."
-            },
-            {
-                id: 4,
-                title: "Desert Sunset",
-                location: "Arizona",
-                year: 2022,
-                image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&h=800&fit=crop",
-                description: "Golden hour in the desert. The warm light of sunset paints the arid landscape in brilliant oranges and reds, creating a stark contrast against the blue sky."
-            },
-            {
-                id: 5,
-                title: "Forest Path",
-                location: "Oregon",
-                year: 2022,
-                image: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&h=800&fit=crop",
-                description: "Peaceful walk through the woods. The dense canopy filters the sunlight, creating a serene atmosphere perfect for reflection and connection with nature."
-            },
-            {
-                id: 6,
-                title: "Urban Architecture",
-                location: "Tokyo",
-                year: 2021,
-                image: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=1200&h=800&fit=crop",
-                description: "Modern cityscape of Tokyo. The futuristic architecture stands as a testament to human innovation, while traditional elements blend seamlessly with contemporary design."
-            }
-        ];
+        photos = [];
     }
 }
 
