@@ -699,14 +699,20 @@ body {
     position: absolute;
     bottom: 8px;
     left: 8px;
-    z-index: 10;
+    z-index: 15;
     pointer-events: auto;
+    background: none !important;
+    border: none !important;
 }
 
 .star-rating {
     display: flex;
     gap: 2px;
     transition: all 0.3s ease;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
 }
 
 .star {
@@ -718,7 +724,12 @@ body {
     color: transparent;
     text-shadow: none;
     filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.7));
-    background: transparent;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
 }
 
 .star:hover {

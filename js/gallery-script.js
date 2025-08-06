@@ -425,8 +425,19 @@ function setPhotoRating(photoId, rating) {
 
 function setupStarRating(photoElement) {
     const starRating = photoElement.querySelector('.star-rating');
+    if (!starRating) {
+        console.error('Star rating element not found');
+        return;
+    }
+    
     const stars = starRating.querySelectorAll('.star');
+    if (stars.length === 0) {
+        console.error('No star elements found');
+        return;
+    }
+    
     const photoId = starRating.getAttribute('data-photo-id');
+    console.log('Setting up star rating for:', photoId);
     
     stars.forEach((star, index) => {
         // Hover effect
@@ -480,5 +491,33 @@ function updateStarDisplay(stars, rating) {
 
 // Gallery feedback function removed - no popups needed
 
+// Debugging function for deployment issues
+function debugStarRating() {
+    console.log('=== Star Rating Debug Info ===');
+    console.log('Photo items found:', document.querySelectorAll('.photo-item').length);
+    console.log('Star rating containers found:', document.querySelectorAll('.photo-rating').length);
+    console.log('Star elements found:', document.querySelectorAll('.star').length);
+    console.log('LocalStorage available:', typeof(Storage) !== "undefined");
+    
+    // Test click on first star
+    const firstStar = document.querySelector('.star');
+    if (firstStar) {
+        console.log('First star found, testing click...');
+        firstStar.style.border = '2px solid red'; // Visual indicator
+    } else {
+        console.error('No stars found on page!');
+    }
+}
+
 // Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', init); 
+document.addEventListener('DOMContentLoaded', () => {
+    init();
+    
+    // Add debug function to window for manual testing
+    window.debugStarRating = debugStarRating;
+    
+    // Auto-debug after 2 seconds
+    setTimeout(() => {
+        debugStarRating();
+    }, 2000);
+}); 
