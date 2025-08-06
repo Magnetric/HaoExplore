@@ -85,27 +85,67 @@ function getGalleryIdFromUrl() {
 }
 
 // Get gallery data
-function getGalleryData() {
+async function getGalleryData() {
     const galleryId = getGalleryIdFromUrl();
     
     if (galleryId) {
-        // Find gallery from localStorage
-        const savedPhotos = localStorage.getItem('galleryPhotos');
-        if (savedPhotos) {
-            const allPhotos = JSON.parse(savedPhotos);
-            const galleryPhotos = allPhotos.filter(photo => photo.galleryId == galleryId);
+        // Check if we have optimized metadata
+        const metadataVersion = localStorage.getItem('metadataVersion');
+        
+        if (metadataVersion === '2.0-optimized') {
+            console.log('Using optimized metadata - fetching individual gallery data');
             
-            if (galleryPhotos.length > 0) {
-                // Extract gallery info from first photo
-                const firstPhoto = galleryPhotos[0];
-                return {
-                    id: galleryId,
-                    name: firstPhoto.galleryName || 'Unnamed Gallery',
-                    location: firstPhoto.location,
-                    year: firstPhoto.year,
-                    photos: galleryPhotos,
-                    description: firstPhoto.galleryDescription || ''
-                };
+            // Get gallery summary from localStorage
+            const gallerySummaries = JSON.parse(localStorage.getItem('gallerySummaries') || '[]');
+            const gallerySummary = gallerySummaries.find(summary => summary.id == galleryId);
+            
+            if (gallerySummary && gallerySummary.metadataPath) {
+                try {
+                    // Fetch individual gallery metadata from S3
+                    const metadataUrl = `https://${S3_CONFIG.bucketName}.s3.${S3_CONFIG.region}.amazonaws.com/${gallerySummary.metadataPath}`;
+                    const cacheBustUrl = `${metadataUrl}?t=${Date.now()}`;
+                    
+                    console.log('Fetching individual gallery metadata from:', cacheBustUrl);
+                    
+                    const response = await fetch(cacheBustUrl);
+                    if (response.ok) {
+                        const galleryMetadata = await response.json();
+                        console.log('Successfully loaded individual gallery metadata:', galleryMetadata);
+                        
+                        return {
+                            id: galleryMetadata.id,
+                            name: galleryMetadata.name,
+                            location: galleryMetadata.country,
+                            year: new Date().getFullYear(), // Could be extracted from tags
+                            photos: galleryMetadata.photos || [],
+                            description: galleryMetadata.description || ''
+                        };
+                    }
+                } catch (error) {
+                    console.error('Error fetching individual gallery metadata:', error);
+                }
+            }
+        } else {
+            console.log('Using legacy metadata - loading from localStorage photos');
+            
+            // Find gallery from localStorage (legacy format)
+            const savedPhotos = localStorage.getItem('galleryPhotos');
+            if (savedPhotos) {
+                const allPhotos = JSON.parse(savedPhotos);
+                const galleryPhotos = allPhotos.filter(photo => photo.galleryId == galleryId);
+                
+                if (galleryPhotos.length > 0) {
+                    // Extract gallery info from first photo
+                    const firstPhoto = galleryPhotos[0];
+                    return {
+                        id: galleryId,
+                        name: firstPhoto.galleryName || 'Unnamed Gallery',
+                        location: firstPhoto.location,
+                        year: firstPhoto.year,
+                        photos: galleryPhotos,
+                        description: firstPhoto.galleryDescription || ''
+                    };
+                }
             }
         }
     }
@@ -122,24 +162,33 @@ function getGalleryData() {
 }
 
 // Load gallery data
-function loadGallery() {
-    const gallery = getGalleryData();
-    
-    // Update page title
-    document.title = `${gallery.name} - Photography Portfolio`;
-    
-    // Update gallery header
-    galleryTitle.textContent = gallery.name;
-    galleryLocation.textContent = gallery.location;
-    galleryYear.textContent = gallery.year;
-    photoCount.textContent = gallery.photos.length;
-    galleryDescription.textContent = gallery.description;
-    
-    // Store photos for full-screen viewer
-    currentGalleryPhotos = gallery.photos;
-    
-    // Load photos grid
-    loadPhotosGrid(gallery.photos);
+async function loadGallery() {
+    try {
+        const gallery = await getGalleryData();
+        
+        // Update page title
+        document.title = `${gallery.name} - Photography Portfolio`;
+        
+        // Update gallery header
+        galleryTitle.textContent = gallery.name;
+        galleryLocation.textContent = gallery.location;
+        galleryYear.textContent = gallery.year;
+        photoCount.textContent = gallery.photos.length;
+        galleryDescription.textContent = gallery.description;
+        
+        // Store photos for full-screen viewer
+        currentGalleryPhotos = gallery.photos;
+        
+        // Load photos grid
+        loadPhotosGrid(gallery.photos);
+        
+        console.log('Gallery loaded successfully:', gallery.name, 'with', gallery.photos.length, 'photos');
+    } catch (error) {
+        console.error('Error loading gallery:', error);
+        // Show error message to user
+        if (galleryTitle) galleryTitle.textContent = 'Error Loading Gallery';
+        if (galleryDescription) galleryDescription.textContent = 'Failed to load gallery data. Please try again.';
+    }
 }
 
 // Load photos into grid
@@ -274,7 +323,7 @@ async function init() {
         loadPhotosFromStorage();
     }
     
-    loadGallery();
+    await loadGallery();
     setupNavigation();
     setupFullscreenViewer();
 }

@@ -28,68 +28,104 @@ async function loadGalleriesFromS3() {
         
         const metadata = await response.json();
         console.log('Successfully loaded metadata from S3:', metadata);
+        console.log('Metadata version:', metadata.version);
         
-        // Extract galleries and photos from centralized metadata
-        const photos = metadata.photos || [];
-        const galleryCovers = metadata.galleryCovers || [];
-        
-        // Group photos by gallery
-        const galleryMap = new Map();
-        
-        photos.forEach(photo => {
-            const galleryId = photo.galleryId || 'default';
-            const galleryName = photo.galleryName || 'Uncategorized';
+        // Check if this is the new optimized format
+        if (metadata.version === '2.0-optimized' && metadata.gallerySummaries) {
+            console.log('Using optimized metadata format (gallerySummaries)');
             
-            if (!galleryMap.has(galleryId)) {
-                galleryMap.set(galleryId, {
-                    id: galleryId,
-                    name: galleryName,
-                    location: photo.location,
-                    year: photo.year,
-                    photos: [],
-                    coverImage: null,
-                    coverThumbnail: null
-                });
-            }
+            // Convert gallerySummaries to gallery format for display
+            galleries = metadata.gallerySummaries.map(summary => ({
+                id: summary.id,
+                name: summary.name,
+                location: summary.country,
+                year: new Date().getFullYear(), // Default year, could be extracted from tags
+                photos: [], // Photos not loaded here - will be fetched when gallery is opened
+                photoCount: summary.photoCount,
+                coverImage: summary.coverPhoto ? summary.coverPhoto.image : null,
+                coverThumbnail: summary.coverPhoto ? (summary.coverPhoto.thumbnail || summary.coverPhoto.image) : null,
+                continent: summary.continent,
+                country: summary.country,
+                description: summary.description,
+                metadataPath: summary.metadataPath
+            }));
             
-            const gallery = galleryMap.get(galleryId);
-            gallery.photos.push(photo);
+            const galleryCovers = metadata.galleryCovers || [];
             
-            // Use the first photo as cover, prefer thumbnail if available
-            if (!gallery.coverImage) {
-                gallery.coverImage = photo.image;
-                gallery.coverThumbnail = photo.thumbnail || photo.image;
-            }
-        });
-        
-        galleries = Array.from(galleryMap.values());
-        
-        // Apply custom cover photos if available
-        console.log('Found gallery covers:', galleryCovers);
-        
-        galleries.forEach(gallery => {
-            console.log(`Checking gallery ${gallery.id} (${gallery.name}) for cover photo`);
-            // Try to match by both string and numeric comparison
-            const coverInfo = galleryCovers.find(cover => 
-                cover.galleryId == gallery.id || 
-                cover.galleryId == parseInt(gallery.id) || 
-                cover.galleryId == gallery.id.toString()
-            );
-            if (coverInfo && coverInfo.coverPhoto) {
-                console.log(`Applying cover photo for gallery ${gallery.id}:`, coverInfo.coverPhoto);
-                gallery.coverImage = coverInfo.coverPhoto.image;
-                gallery.coverThumbnail = coverInfo.coverPhoto.thumbnail || coverInfo.coverPhoto.image;
-            } else {
-                console.log(`No cover photo found for gallery ${gallery.id}`);
-            }
-        });
-        
-        console.log('Loaded galleries from S3 metadata:', galleries.length);
-        
-        // Save to localStorage as backup for offline viewing
-        localStorage.setItem('galleryPhotos', JSON.stringify(photos));
-        localStorage.setItem('galleryCovers', JSON.stringify(galleryCovers));
-        localStorage.setItem('lastS3Update', new Date().toISOString());
+            console.log('Loaded galleries from optimized metadata:', galleries.length);
+            
+            // Save summary data to localStorage
+            localStorage.setItem('gallerySummaries', JSON.stringify(metadata.gallerySummaries));
+            localStorage.setItem('galleryCovers', JSON.stringify(galleryCovers));
+            localStorage.setItem('lastS3Update', new Date().toISOString());
+            localStorage.setItem('metadataVersion', metadata.version);
+            
+        } else {
+            console.log('Using legacy metadata format (full photos array)');
+            
+            // Extract galleries and photos from centralized metadata (old format)
+            const photos = metadata.photos || [];
+            const galleryCovers = metadata.galleryCovers || [];
+            
+            // Group photos by gallery
+            const galleryMap = new Map();
+            
+            photos.forEach(photo => {
+                const galleryId = photo.galleryId || 'default';
+                const galleryName = photo.galleryName || 'Uncategorized';
+                
+                if (!galleryMap.has(galleryId)) {
+                    galleryMap.set(galleryId, {
+                        id: galleryId,
+                        name: galleryName,
+                        location: photo.location,
+                        year: photo.year,
+                        photos: [],
+                        coverImage: null,
+                        coverThumbnail: null
+                    });
+                }
+                
+                const gallery = galleryMap.get(galleryId);
+                gallery.photos.push(photo);
+                
+                // Use the first photo as cover, prefer thumbnail if available
+                if (!gallery.coverImage) {
+                    gallery.coverImage = photo.image;
+                    gallery.coverThumbnail = photo.thumbnail || photo.image;
+                }
+            });
+            
+            galleries = Array.from(galleryMap.values());
+            
+            // Apply custom cover photos if available
+            console.log('Found gallery covers:', galleryCovers);
+            
+            galleries.forEach(gallery => {
+                console.log(`Checking gallery ${gallery.id} (${gallery.name}) for cover photo`);
+                // Try to match by both string and numeric comparison
+                const coverInfo = galleryCovers.find(cover => 
+                    cover.galleryId == gallery.id || 
+                    cover.galleryId == parseInt(gallery.id) || 
+                    cover.galleryId == gallery.id.toString()
+                );
+                if (coverInfo && coverInfo.coverPhoto) {
+                    console.log(`Applying cover photo for gallery ${gallery.id}:`, coverInfo.coverPhoto);
+                    gallery.coverImage = coverInfo.coverPhoto.image;
+                    gallery.coverThumbnail = coverInfo.coverPhoto.thumbnail || coverInfo.coverPhoto.image;
+                } else {
+                    console.log(`No cover photo found for gallery ${gallery.id}`);
+                }
+            });
+            
+            console.log('Loaded galleries from legacy metadata:', galleries.length);
+            
+            // Save to localStorage as backup for offline viewing
+            localStorage.setItem('galleryPhotos', JSON.stringify(photos));
+            localStorage.setItem('galleryCovers', JSON.stringify(galleryCovers));
+            localStorage.setItem('lastS3Update', new Date().toISOString());
+            localStorage.setItem('metadataVersion', metadata.version || '1.0');
+        }
         
         return true;
         
@@ -354,7 +390,7 @@ function createGalleryElement(gallery, index) {
             <div class="gallery-meta">
                 <span><i class="fas fa-map-marker-alt"></i> ${gallery.location}</span>
                 <span><i class="fas fa-calendar"></i> ${gallery.year}</span>
-                <span><i class="fas fa-images"></i> ${gallery.photos.length} photos</span>
+                <span><i class="fas fa-images"></i> ${gallery.photoCount || gallery.photos.length} photos</span>
             </div>
         </div>
     `;
