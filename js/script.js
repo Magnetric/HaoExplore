@@ -59,57 +59,9 @@ function loadGalleriesFromStorage() {
         });
         console.log('Loaded galleries from localStorage:', galleries.length);
     } else {
-        // Default sample galleries if no saved data
-        galleries = [
-            {
-                id: 1,
-                name: "Sample Gallery",
-                location: "Portfolio",
-                year: 2024,
-                coverImage: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=400&fit=crop&auto=format",
-                coverThumbnail: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&h=200&fit=crop&auto=format",
-                photos: [
-                    {
-                        id: 1,
-                        title: "Mountain Landscape",
-                        location: "Portfolio",
-                        year: 2024,
-                        image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop&auto=format",
-                        thumbnail: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&h=200&fit=crop&auto=format",
-                        description: "Beautiful mountain landscape photography"
-                    },
-                    {
-                        id: 2,
-                        title: "Nature Photography",
-                        location: "Portfolio",
-                        year: 2024,
-                        image: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=600&fit=crop&auto=format",
-                        thumbnail: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=300&h=200&fit=crop&auto=format",
-                        description: "Stunning forest landscape"
-                    }
-                ]
-            },
-            {
-                id: 2,
-                name: "Urban Photography",
-                location: "City",
-                year: 2023,
-                coverImage: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=600&h=400&fit=crop&auto=format",
-                coverThumbnail: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=300&h=200&fit=crop&auto=format",
-                photos: [
-                    {
-                        id: 3,
-                        title: "City Skyline",
-                        location: "Urban",
-                        year: 2023,
-                        image: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=800&h=600&fit=crop&auto=format",
-                        thumbnail: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=300&h=200&fit=crop&auto=format",
-                        description: "Urban architecture and city life"
-                    }
-                ]
-            }
-        ];
-        console.log('Using default galleries:', galleries.length);
+        // No saved data, use empty array
+        galleries = [];
+        console.log('No galleries found in localStorage');
     }
 }
 
