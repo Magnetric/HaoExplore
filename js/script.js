@@ -259,69 +259,131 @@ function setupRealTimeUpdates() {
 }
 
 // Check if there are new photos or galleries
-function checkForUpdates() {
-    const savedPhotos = localStorage.getItem('galleryPhotos');
-    if (savedPhotos) {
-        console.log('Checking for updates...');
-        const newPhotos = JSON.parse(savedPhotos);
+async function checkForUpdates() {
+    console.log('Checking for updates...');
+    
+    // Check what metadata version we're using
+    const metadataVersion = localStorage.getItem('metadataVersion');
+    
+    if (metadataVersion === '2.0-optimized') {
+        console.log('Using optimized metadata - checking S3 for updates');
         
-        // Group new photos into galleries
-        const galleryMap = new Map();
-        newPhotos.forEach(photo => {
-            const galleryId = photo.galleryId || 'default';
-            const galleryName = photo.galleryName || 'Uncategorized';
+        try {
+            // Fetch latest metadata from S3
+            const metadataUrl = `https://${S3_CONFIG.bucketName}.s3.${S3_CONFIG.region}.amazonaws.com/galleries/metadata.json`;
+            const response = await fetch(metadataUrl + '?t=' + Date.now());
             
-            if (!galleryMap.has(galleryId)) {
-                galleryMap.set(galleryId, {
-                    id: galleryId,
-                    name: galleryName,
-                    location: photo.location,
-                    year: photo.year,
-                    photos: [],
-                    coverImage: null,
-                    coverThumbnail: null
-                });
+            if (response.ok) {
+                const newMetadata = await response.json();
+                const lastUpdate = localStorage.getItem('lastS3Update');
+                
+                // Check if metadata has been updated since last fetch
+                if (newMetadata.lastUpdated !== lastUpdate) {
+                    console.log('Detected updated metadata, refreshing galleries...');
+                    
+                    // Convert gallerySummaries to gallery format
+                    const newGalleries = newMetadata.gallerySummaries.map(summary => ({
+                        id: summary.id,
+                        name: summary.name,
+                        location: summary.country,
+                        year: new Date().getFullYear(),
+                        photos: [],
+                        photoCount: summary.photoCount,
+                        coverImage: summary.coverPhoto ? summary.coverPhoto.image : null,
+                        coverThumbnail: summary.coverPhoto ? (summary.coverPhoto.thumbnail || summary.coverPhoto.image) : null,
+                        continent: summary.continent,
+                        country: summary.country,
+                        description: summary.description,
+                        metadataPath: summary.metadataPath
+                    }));
+                    
+                    const oldCount = galleries.length;
+                    galleries = newGalleries;
+                    currentFilteredGalleries = [...galleries];
+                    loadGalleries();
+                    setupFilters();
+                    
+                    // Update localStorage
+                    localStorage.setItem('gallerySummaries', JSON.stringify(newMetadata.gallerySummaries));
+                    localStorage.setItem('galleryCovers', JSON.stringify(newMetadata.galleryCovers || []));
+                    localStorage.setItem('lastS3Update', newMetadata.lastUpdated);
+                    
+                    showUpdateNotification();
+                    console.log(`Gallery updated: ${oldCount} → ${galleries.length} galleries`);
+                } else {
+                    console.log('No metadata changes detected');
+                }
             }
+        } catch (error) {
+            console.error('Error checking for metadata updates:', error);
+        }
+        
+    } else {
+        console.log('Using legacy metadata - checking localStorage');
+        
+        // Legacy update checking (for backwards compatibility)
+        const savedPhotos = localStorage.getItem('galleryPhotos');
+        if (savedPhotos) {
+            const newPhotos = JSON.parse(savedPhotos);
             
-            const gallery = galleryMap.get(galleryId);
-            gallery.photos.push(photo);
+            // Group new photos into galleries
+            const galleryMap = new Map();
+            newPhotos.forEach(photo => {
+                const galleryId = photo.galleryId || 'default';
+                const galleryName = photo.galleryName || 'Uncategorized';
+                
+                if (!galleryMap.has(galleryId)) {
+                    galleryMap.set(galleryId, {
+                        id: galleryId,
+                        name: galleryName,
+                        location: photo.location,
+                        year: photo.year,
+                        photos: [],
+                        coverImage: null,
+                        coverThumbnail: null
+                    });
+                }
+                
+                const gallery = galleryMap.get(galleryId);
+                gallery.photos.push(photo);
+                
+                // Use the first photo as cover, prefer thumbnail if available
+                if (!gallery.coverImage) {
+                    gallery.coverImage = photo.image;
+                    gallery.coverThumbnail = photo.thumbnail || photo.image;
+                }
+            });
             
-            // Use the first photo as cover, prefer thumbnail if available
-            if (!gallery.coverImage) {
-                gallery.coverImage = photo.image;
-                gallery.coverThumbnail = photo.thumbnail || photo.image;
+            const newGalleries = Array.from(galleryMap.values());
+            
+            // Apply custom cover photos to new galleries
+            const galleryCovers = JSON.parse(localStorage.getItem('galleryCovers') || '[]');
+            newGalleries.forEach(gallery => {
+                const coverInfo = galleryCovers.find(cover => 
+                    cover.galleryId == gallery.id || 
+                    cover.galleryId == parseInt(gallery.id) || 
+                    cover.galleryId == gallery.id.toString()
+                );
+                if (coverInfo && coverInfo.coverPhoto) {
+                    console.log(`Applying cover photo for gallery ${gallery.id} in update:`, coverInfo.coverPhoto);
+                    gallery.coverImage = coverInfo.coverPhoto.image;
+                    gallery.coverThumbnail = coverInfo.coverPhoto.thumbnail || coverInfo.coverPhoto.image;
+                }
+            });
+            
+            // Check if galleries have changed
+            if (JSON.stringify(newGalleries) !== JSON.stringify(galleries)) {
+                console.log('Detected new galleries, updating gallery...');
+                const oldCount = galleries.length;
+                galleries = newGalleries;
+                currentFilteredGalleries = [...galleries];
+                loadGalleries();
+                setupFilters(); // Re-populate filters with new data
+                showUpdateNotification();
+                console.log(`Gallery updated: ${oldCount} → ${galleries.length} galleries`);
+            } else {
+                console.log('No gallery changes detected');
             }
-        });
-        
-        const newGalleries = Array.from(galleryMap.values());
-        
-        // Apply custom cover photos to new galleries
-        const galleryCovers = JSON.parse(localStorage.getItem('galleryCovers') || '[]');
-        newGalleries.forEach(gallery => {
-            const coverInfo = galleryCovers.find(cover => 
-                cover.galleryId == gallery.id || 
-                cover.galleryId == parseInt(gallery.id) || 
-                cover.galleryId == gallery.id.toString()
-            );
-            if (coverInfo && coverInfo.coverPhoto) {
-                console.log(`Applying cover photo for gallery ${gallery.id} in update:`, coverInfo.coverPhoto);
-                gallery.coverImage = coverInfo.coverPhoto.image;
-                gallery.coverThumbnail = coverInfo.coverPhoto.thumbnail || coverInfo.coverPhoto.image;
-            }
-        });
-        
-        // Check if galleries have changed
-        if (JSON.stringify(newGalleries) !== JSON.stringify(galleries)) {
-            console.log('Detected new galleries, updating gallery...');
-            const oldCount = galleries.length;
-            galleries = newGalleries;
-            currentFilteredGalleries = [...galleries];
-            loadGalleries();
-            setupFilters(); // Re-populate filters with new data
-            showUpdateNotification();
-            console.log(`Gallery updated: ${oldCount} → ${galleries.length} galleries`);
-        } else {
-            console.log('No gallery changes detected');
         }
     }
 }
