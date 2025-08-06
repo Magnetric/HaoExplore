@@ -1,5 +1,104 @@
-// Load galleries from localStorage or use default sample data
+// S3 Configuration for fetching gallery data
+const S3_CONFIG = {
+    bucketName: 'haophotography',
+    region: 'eu-north-1'
+};
+
+// Load galleries from S3 metadata or fallback to localStorage/default data
 let galleries = [];
+
+// Load galleries from S3 metadata
+async function loadGalleriesFromS3() {
+    try {
+        console.log('Attempting to load galleries from S3 metadata...');
+        
+        // Construct the S3 URL for the metadata file
+        const metadataUrl = `https://${S3_CONFIG.bucketName}.s3.${S3_CONFIG.region}.amazonaws.com/galleries/metadata.json`;
+        
+        // Add cache-busting parameter to ensure fresh data
+        const cacheBustUrl = `${metadataUrl}?t=${Date.now()}`;
+        
+        console.log('Fetching metadata from:', cacheBustUrl);
+        
+        const response = await fetch(cacheBustUrl);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const metadata = await response.json();
+        console.log('Successfully loaded metadata from S3:', metadata);
+        
+        // Extract galleries and photos from centralized metadata
+        const photos = metadata.photos || [];
+        const galleryCovers = metadata.galleryCovers || [];
+        
+        // Group photos by gallery
+        const galleryMap = new Map();
+        
+        photos.forEach(photo => {
+            const galleryId = photo.galleryId || 'default';
+            const galleryName = photo.galleryName || 'Uncategorized';
+            
+            if (!galleryMap.has(galleryId)) {
+                galleryMap.set(galleryId, {
+                    id: galleryId,
+                    name: galleryName,
+                    location: photo.location,
+                    year: photo.year,
+                    photos: [],
+                    coverImage: null,
+                    coverThumbnail: null
+                });
+            }
+            
+            const gallery = galleryMap.get(galleryId);
+            gallery.photos.push(photo);
+            
+            // Use the first photo as cover, prefer thumbnail if available
+            if (!gallery.coverImage) {
+                gallery.coverImage = photo.image;
+                gallery.coverThumbnail = photo.thumbnail || photo.image;
+            }
+        });
+        
+        galleries = Array.from(galleryMap.values());
+        
+        // Apply custom cover photos if available
+        console.log('Found gallery covers:', galleryCovers);
+        
+        galleries.forEach(gallery => {
+            console.log(`Checking gallery ${gallery.id} (${gallery.name}) for cover photo`);
+            // Try to match by both string and numeric comparison
+            const coverInfo = galleryCovers.find(cover => 
+                cover.galleryId == gallery.id || 
+                cover.galleryId == parseInt(gallery.id) || 
+                cover.galleryId == gallery.id.toString()
+            );
+            if (coverInfo && coverInfo.coverPhoto) {
+                console.log(`Applying cover photo for gallery ${gallery.id}:`, coverInfo.coverPhoto);
+                gallery.coverImage = coverInfo.coverPhoto.image;
+                gallery.coverThumbnail = coverInfo.coverPhoto.thumbnail || coverInfo.coverPhoto.image;
+            } else {
+                console.log(`No cover photo found for gallery ${gallery.id}`);
+            }
+        });
+        
+        console.log('Loaded galleries from S3 metadata:', galleries.length);
+        
+        // Save to localStorage as backup for offline viewing
+        localStorage.setItem('galleryPhotos', JSON.stringify(photos));
+        localStorage.setItem('galleryCovers', JSON.stringify(galleryCovers));
+        localStorage.setItem('lastS3Update', new Date().toISOString());
+        
+        return true;
+        
+    } catch (error) {
+        console.error('Error loading galleries from S3:', error);
+        console.log('Falling back to localStorage or default data...');
+        return false;
+    }
+}
 
 function loadGalleriesFromStorage() {
     const savedPhotos = localStorage.getItem('galleryPhotos');
@@ -87,8 +186,17 @@ console.log('DOM Elements found:', {
 let currentFilteredGalleries = [];
 
 // Initialize the application
-function init() {
-    loadGalleriesFromStorage();
+async function init() {
+    console.log('Starting application initialization...');
+    
+    // Try loading from S3 first, fallback to localStorage if needed
+    const s3Success = await loadGalleriesFromS3();
+    
+    if (!s3Success) {
+        console.log('S3 loading failed, falling back to localStorage');
+        loadGalleriesFromStorage();
+    }
+    
     currentFilteredGalleries = [...galleries];
     console.log('Initialized with galleries:', galleries.length, 'Filtered:', currentFilteredGalleries.length);
     loadGalleries();

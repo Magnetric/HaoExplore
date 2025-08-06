@@ -1,5 +1,50 @@
-// Load photos from localStorage
+// S3 Configuration for fetching gallery data
+const S3_CONFIG = {
+    bucketName: 'haophotography',
+    region: 'eu-north-1'
+};
+
+// Load photos from S3 metadata or localStorage
 let photos = [];
+
+async function loadPhotosFromS3() {
+    try {
+        console.log('Attempting to load photos from S3 metadata...');
+        
+        // Construct the S3 URL for the metadata file
+        const metadataUrl = `https://${S3_CONFIG.bucketName}.s3.${S3_CONFIG.region}.amazonaws.com/galleries/metadata.json`;
+        
+        // Add cache-busting parameter to ensure fresh data
+        const cacheBustUrl = `${metadataUrl}?t=${Date.now()}`;
+        
+        console.log('Fetching metadata from:', cacheBustUrl);
+        
+        const response = await fetch(cacheBustUrl);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const metadata = await response.json();
+        console.log('Successfully loaded metadata from S3:', metadata);
+        
+        // Extract photos from centralized metadata
+        photos = metadata.photos || [];
+        
+        console.log('Loaded photos from S3 metadata:', photos.length);
+        
+        // Save to localStorage as backup for offline viewing
+        localStorage.setItem('galleryPhotos', JSON.stringify(photos));
+        localStorage.setItem('lastS3Update', new Date().toISOString());
+        
+        return true;
+        
+    } catch (error) {
+        console.error('Error loading photos from S3:', error);
+        console.log('Falling back to localStorage...');
+        return false;
+    }
+}
 
 function loadPhotosFromStorage() {
     const savedPhotos = localStorage.getItem('galleryPhotos');
@@ -218,8 +263,17 @@ function setupFullscreenViewer() {
 }
 
 // Initialize the gallery page
-function init() {
-    loadPhotosFromStorage();
+async function init() {
+    console.log('Starting gallery page initialization...');
+    
+    // Try loading from S3 first, fallback to localStorage if needed
+    const s3Success = await loadPhotosFromS3();
+    
+    if (!s3Success) {
+        console.log('S3 loading failed, falling back to localStorage');
+        loadPhotosFromStorage();
+    }
+    
     loadGallery();
     setupNavigation();
     setupFullscreenViewer();
