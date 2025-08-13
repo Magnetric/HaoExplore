@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="images/favicon.png" type="image/png">
+    <title>Photography Portfolio</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<!-- oncontextmenu="return false;" -->
+<body>
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">
+                <a href="index.html" class="logo-link">Light & Lens</a>
+            </h1>
+            <nav class="nav">
+                <button class="nav-toggle" id="navToggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <ul class="nav-menu" id="navMenu">
+                    <li><a href="#home" class="nav-link active">Home</a></li>
+                    <li><a href="#gallery" class="nav-link">Gallery</a></li>
+                    <li><a href="#map" class="nav-link">Map</a></li>
+                    <li><a href="#about" class="nav-link">About</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- Hero Section -->
+        <section id="home" class="hero">
+            <div class="container">
+                <div class="hero-content">
+                    <h1 class="hero-title">Capturing Moments</h1>
+                    <p class="hero-subtitle">The Story of Light and Shadow</p>
+                    <a href="#gallery" class="btn btn-primary">Explore Gallery</a>
+
+                    <!-- Social Media Links -->
+                    <div class="social-links">
+                        <a href="https://www.xiaohongshu.com/user/profile/5b32f7b311be1071312c59cc" target="_blank"
+                            class="social-link">
+                            <i class="fas fa-book-open"></i>
+                            </a>
+                        <a href="https://www.instagram.com/magnetrician/" target="_blank"
+                            class="social-link">
+                            <i class="fab fa-instagram"></i>
+                            </a>
+                        <a href="mailto:xuhao.cth@gmail.com" class="social-link">
+                             <i class="fas fa-envelope"></i>
+                            </a>
+                        <a href="https://www.linkedin.com/in/hao-xu-b277231b8/" target="_blank"
+                            class="social-link">
+                            <i class="fab fa-linkedin"></i>
+                            </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Filter Section -->
+        <section class="filter-section">
+            <div class="container">
+                <div class="filter-controls">
+                    <div class="filter-group">
+                        <label for="yearFilter">Year:</label>
+                        <select id="yearFilter" class="filter-select">
+                            <option value="">All Years</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="locationFilter">Location:</label>
+                        <select id="locationFilter" class="filter-select">
+                            <option value="">All Locations</option>
+                        </select>
+                    </div>
+                    <button id="clearFilters" class="btn btn-secondary">Clear Filters</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Gallery Section -->
+        <section id="gallery" class="gallery">
+            <div class="container">
+                <div class="gallery-grid" id="galleryGrid">
+                    <!-- Photos will be dynamically loaded here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Map Section -->
+        <section id="map" class="map-section">
+            <div class="container">
+                <div class="map-container">
+                    <div id="map"></div>
+                    <div class="map-filter-control">
+                        <div class="filter-header">
+                            <h3>Year Filter</h3>
+                        </div>
+                        <div class="year-checkboxes" id="mapYearCheckboxes">
+                            <!-- 年份选项将在这里动态生成 -->
+                        </div>
+                    </div>
+                    <div class="loading-overlay" id="loadingOverlay">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- About Section -->
+        <section id="about" class="about">
+            <div class="container">
+                <div class="about-content">
+                    <h2>About</h2>
+                    <p>Welcome to my photography portfolio. Here you'll find a collection of moments captured across
+                        different years and locations. It is still under development.</p>
+                    <p>Feel free to explore the galleries.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Photography Portfolio. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/script.js"></script>
+</body>
+
+</html>

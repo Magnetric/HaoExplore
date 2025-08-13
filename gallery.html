@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="images/favicon.png" type="image/png">
+    <title>Gallery Name - Photography Portfolio</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">
+                <a href="index.html" class="logo-link">Light & Lens</a>
+            </h1>
+            <nav class="nav">
+                <button class="nav-toggle" id="navToggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <ul class="nav-menu" id="navMenu">
+                    <li><a href="index.html" class="nav-link">Home</a></li>
+                    <li><a href="index.html#gallery" class="nav-link">Gallery</a></li>
+                    <li><a href="index.html#map" class="nav-link">Map</a></li>
+                    <li><a href="index.html#about" class="nav-link">About</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="gallery-page">
+        <div class="container">
+            <!-- Gallery Header -->
+            <div class="gallery-header">
+                <div class="gallery-info">
+                    <h1 id="galleryTitle" class="gallery-title"></h1>
+                    <div class="gallery-meta">
+                        <span class="meta-item">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span id="galleryLocation"></span>
+                        </span>
+                        <span class="meta-item">
+                            <i class="fas fa-calendar"></i>
+                            <span id="galleryYear"></span>
+                        </span>
+                        <span class="meta-item">
+                            <i class="fas fa-images"></i>
+                            <span id="photoCount"></span> photos
+                        </span>
+                    </div>
+                    <p id="galleryDescription" class="gallery-description"></p>
+                </div>
+                <div class="gallery-actions">
+                    <a href="index.html#gallery" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i>
+                        Back to Home
+                    </a>
+                </div>
+            </div>
+
+            <!-- Photos Grid -->
+            <div class="photos-grid" id="photosGrid">
+                <!-- Photos will be dynamically loaded here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Full-screen Photo Viewer -->
+    <div id="fullscreenViewer" class="fullscreen-viewer">
+        <div class="fullscreen-content">
+            <div class="fullscreen-image-container">
+                <img id="fullscreenImage" src="" alt="" loading="lazy">
+            </div>
+            
+            <!-- Navigation Controls -->
+            <button id="prevPhotoBtn" class="fullscreen-nav-btn prev-btn">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <button id="nextPhotoBtn" class="fullscreen-nav-btn next-btn">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            
+            <!-- Close Button -->
+            <button id="closeViewerBtn" class="fullscreen-close-btn">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <!-- Photo Counter -->
+            <div class="fullscreen-counter">
+                <span id="currentPhotoIndex">1</span> / <span id="totalPhotos">1</span>
+            </div>
+            
+            <!-- Fullscreen Star Rating -->
+            <div class="fullscreen-rating">
+                <div class="star-rating" id="fullscreenStarRating">
+                    <!-- Stars will be dynamically generated -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Photography Portfolio. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="js/gallery-script.js"></script>
+</body>
+</html> 

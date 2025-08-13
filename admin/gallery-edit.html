@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="../images/favicon.png" type="image/png">
+    <title>Edit Gallery - Photography Portfolio</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="admin-styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">
+                <a href="../index.html" class="logo-link">Gallery Admin</a>
+            </h1>
+            <nav class="nav">
+                <ul class="nav-menu">
+                    <li><a href="admin.html" class="nav-link">Back to Admin</a></li>
+                    <li><a href="../index.html" class="nav-link">View Site</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="edit-container">
+        <div class="edit-header">
+            <div>
+                <h1 id="galleryName">Loading Gallery...</h1>
+                <p><span id="galleryLocation">Loading...</span> | <span id="photoCount">0</span> photos</p>
+            </div>
+            <div class="edit-actions">
+                <button class="btn-save" id="saveChangesBtn">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </div>
+
+        <div id="messageContainer"></div>
+
+        <!-- Gallery Information Section -->
+        <div class="gallery-info-section">
+            <div class="gallery-info-grid">
+                <div class="info-fields">
+                    <form id="galleryEditForm">
+                        <div class="form-group">
+                            <label for="editGalleryName">Gallery Name</label>
+                            <input type="text" id="editGalleryName" class="form-control" placeholder="Enter gallery name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editGalleryDescription">Description</label>
+                            <textarea id="editGalleryDescription" class="form-control" rows="3" placeholder="Enter gallery description..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Years</label>
+                            <div class="years-container" id="galleryYears"></div>
+                            <div class="add-year-form">
+                                <select id="galleryYearSelect" class="form-control" onchange="handleYearSelect(event, 'gallery')">
+                                    <option value="">Select Year</option>
+                                    <option value="2025">2025</option>
+                                    <option value="2024">2024</option>
+                                    <option value="2023">2023</option>
+                                    <option value="2022">2022</option>
+                                    <option value="2021">2021</option>
+                                    <option value="2020">2020</option>
+                                    <option value="2019">2019</option>
+                                    <option value="2018">2018</option>
+                                    <option value="2017">2017</option>
+                                    <option value="2016">2016</option>
+                                    <option value="2015">2015</option>
+                                    <option value="2014">2014</option>
+                                    <option value="2013">2013</option>
+                                    <option value="2012">2012</option>
+                                    <option value="2011">2011</option>
+                                    <option value="2010">2010</option>
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="cover-photo-section">
+                    <div id="coverPhotoDisplay" class="cover-photo-display empty" onclick="selectCoverPhoto()">
+                        <span>Click to select cover photo</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Description Section removed - now integrated into gallery info section -->
+
+        <!-- Photo Management Section -->
+        <div class="photos-section">
+            <h3>
+                Photos in Gallery
+                <button class="btn-upload-photos" onclick="addNewPhoto()" id="uploadPhotosBtn">
+                    <i class="fas fa-plus"></i> Add Photos
+                </button>
+            </h3>
+            <div id="photosGrid" class="photos-grid">
+                <!-- Photos will be loaded here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Upload Photos Modal -->
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Upload Photos to Gallery</h3>
+                <button class="modal-close" onclick="closeUploadModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-area" onclick="document.getElementById('photoUpload').click()">
+                    <div class="upload-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <div class="upload-text">
+                        <p>Click to select photos or drag and drop here</p>
+                        <p><small>Supports JPG, PNG, WebP (Max 50MB each)</small></p>
+                    </div>
+                    <input type="file" id="photoUpload" class="upload-input" multiple accept="image/*" onchange="handleFileSelect(event)">
+                </div>
+                <button class="upload-btn" id="uploadBtn" onclick="uploadPhotos()" disabled>
+                    <i class="fas fa-upload"></i> Upload Photos
+                </button>
+                <div class="upload-progress" id="uploadProgress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">0%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cover Photo Selection Modal -->
+    <div id="coverPhotoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Select Cover Photo</h3>
+                <button class="modal-close" onclick="closeCoverPhotoModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="coverPhotoGrid" class="cover-photo-grid">
+                    <!-- Photos will be loaded here -->
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-undo" onclick="closeCoverPhotoModal()">Close</button>
+                    <p style="color: #7f8c8d; font-size: 0.9rem; margin: 0; text-align: center;">Click on a photo above to set it as cover</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Note: AWS SDK no longer needed for API-based approach -->
+    <!-- <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1001.0.min.js"></script> -->
+    <!-- <script src="gallery-edit.js?v=2.2"></script> -->
+    <script src="gallery-edit.js"></script>
+</body>
+</html> 
