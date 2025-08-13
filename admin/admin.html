@@ -75,30 +75,27 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Years <span style="color: #e74c3c; font-weight: normal;">(required)</span></label>
+                    <label>Years</label>
+                    <select id="galleryYearSelect" class="form-control">
+                        <option value="">Select Year</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                        <option value="2022">2022</option>
+                        <option value="2021">2021</option>
+                        <option value="2020">2020</option>
+                        <option value="2019">2019</option>
+                        <option value="2018">2018</option>
+                        <option value="2017">2017</option>
+                        <option value="2016">2016</option>
+                        <option value="2015">2015</option>
+                        <option value="2014">2014</option>
+                        <option value="2013">2013</option>
+                        <option value="2012">2012</option>
+                        <option value="2011">2011</option>
+                        <option value="2010">2010</option>
+                    </select>
                     <div class="years-container" id="galleryYears"></div>
-                    <div class="add-year-form">
-                        <select id="galleryYearSelect" class="form-control">
-                            <option value="">Select Year</option>
-                            <option value="2025">2025</option>
-                            <option value="2024">2024</option>
-                            <option value="2023">2023</option>
-                            <option value="2022">2022</option>
-                            <option value="2021">2021</option>
-                            <option value="2020">2020</option>
-                            <option value="2019">2019</option>
-                            <option value="2018">2018</option>
-                            <option value="2017">2017</option>
-                            <option value="2016">2016</option>
-                            <option value="2015">2015</option>
-                            <option value="2014">2014</option>
-                            <option value="2013">2013</option>
-                            <option value="2012">2012</option>
-                            <option value="2011">2011</option>
-                            <option value="2010">2010</option>
-                        </select>
-                        <button type="button" onclick="addYear('gallery')">Add Year</button>
-                    </div>
                 </div>
 
                 <button type="submit" class="btn-primary">Create Gallery</button>
@@ -109,17 +106,18 @@
         <div id="manage-galleries" class="tab-content">
             <div class="galleries-manager">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h3>Current Galleries</h3>
+                    <!--
                     <div style="display: flex; gap: 0.5rem;">
                         <button type="button" onclick="adminPanel.updateGalleriesMetadata()" 
                                 style="background: #17a2b8; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem;">
-                            <i class="fas fa-sync-alt"></i> Update Galleries' Metadata
+                            #<i class="fas fa-sync-alt"></i> Update Galleries' Metadata
                         </button>
                         <button type="button" onclick="adminPanel.updatePhotosMetadata()" 
                                 style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem;">
                             <i class="fas fa-camera"></i> Update Photos' Metadata
                         </button>
                     </div>
+                    -->
                 </div>
                 
                 <!-- Filter Section -->

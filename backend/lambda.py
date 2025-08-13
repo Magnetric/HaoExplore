@@ -132,6 +132,9 @@ def create_gallery(gallery_data):
         if not gallery_data.get('years') or len(gallery_data['years']) == 0:
             return create_response(400, {'error': 'At least one year must be selected'})
         
+        # Ensure years are strings for DynamoDB compatibility
+        years = [str(year) for year in gallery_data['years']]
+        
         # Check for duplicate gallery by scanning DynamoDB (same name, continent, country
         scan = tbl_galleries.scan()
         existing = [
@@ -157,22 +160,45 @@ def create_gallery(gallery_data):
             'continent': gallery_data['continent'],
             'country': gallery_data['country'],
             'description': gallery_data.get('description', '').strip(),
-            # Years are required; normalize to list
-            'years': gallery_data.get('years') or [],
+            # Years are required; normalize to list and ensure they are strings
+            'years': years,
             'photoCount': 0,
             'createdAt': current_time,
             'updatedAt': current_time
         }
+        
+        # Add coordinates if provided
+        if 'latitude' in gallery_data and 'longitude' in gallery_data:
+            # Convert coordinates to Decimal for DynamoDB compatibility
+            gallery_item['latitude'] = Decimal(str(gallery_data['latitude']))
+            gallery_item['longitude'] = Decimal(str(gallery_data['longitude']))
+            logger.info(f"Added coordinates for gallery {gallery_item['name']}: {gallery_data['latitude']}, {gallery_data['longitude']}")
+        else:
+            # Try to geocode the location if coordinates not provided
+            try:
+                latlon = geocode_place(gallery_data['name'], gallery_data['country'])
+                if latlon:
+                    gallery_item['latitude'] = Decimal(str(latlon[0]))
+                    gallery_item['longitude'] = Decimal(str(latlon[1]))
+                    logger.info(f"Geocoded coordinates for gallery {gallery_item['name']}: {latlon[0]}, {latlon[1]}")
+                else:
+                    logger.warning(f"Could not geocode coordinates for gallery {gallery_item['name']}")
+            except Exception as e:
+                logger.error(f"Error geocoding gallery {gallery_item['name']}: {str(e)}")
         tbl_galleries.put_item(Item=gallery_item)
 
         # Create S3 folder
-        s3_client.put_object(Bucket=BUCKET_NAME, Key=f"galleries/{gallery_item['continent']}/{gallery_item['country']}/{gallery_item['name']}/", Body=b"")
+        try:
+            s3_client.put_object(Bucket=BUCKET_NAME, Key=f"galleries/{gallery_item['continent']}/{gallery_item['country']}/{gallery_item['name']}/", Body=b"")
+            logger.info(f"Created S3 folder for gallery {gallery_item['name']}")
+        except Exception as s3_error:
+            logger.warning(f"Failed to create S3 folder for gallery {gallery_item['name']}: {str(s3_error)}")
+            # Continue with gallery creation even if S3 folder creation fails
 
         # Build response object
         logger.info(f"Successfully created gallery in DynamoDB: {gallery_item['name']}")
-        return create_response(201, {
-            'message': 'Gallery created successfully',
-            'gallery': {
+        
+        response_gallery = {
             'id': gallery_id,
             'name': gallery_item['name'],
             'continent': gallery_item['continent'],
@@ -184,9 +210,22 @@ def create_gallery(gallery_data):
             'createdAt': current_time,
             'updatedAt': current_time
         }
-    })
+        
+        # Add coordinates to response if available
+        if 'latitude' in gallery_item and 'longitude' in gallery_item:
+            # Convert Decimal back to float for JSON response
+            response_gallery['latitude'] = float(gallery_item['latitude'])
+            response_gallery['longitude'] = float(gallery_item['longitude'])
+        
+        return create_response(201, {
+            'message': 'Gallery created successfully',
+            'gallery': response_gallery
+        })
     except Exception as e:
         logger.error(f"Error creating gallery: {str(e)}")
+        logger.error(f"Gallery data received: {gallery_data}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return create_response(500, {'error': 'Failed to create gallery', 'details': str(e)})
 
 def list_galleries():
@@ -1489,7 +1528,6 @@ def geocode_place(gallery_name, country=None):
             _last_geocode_ts = time.time()
             data = json.loads(resp.read().decode("utf-8"))
             if data:
-                # 直接用字符串构造 Decimal，避免浮点误差
                 lat = Decimal(data[0]["lat"])
                 lon = Decimal(data[0]["lon"])
                 _geocode_cache[cache_key] = (lat, lon)

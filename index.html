@@ -95,6 +95,12 @@
                 <div class="gallery-grid" id="galleryGrid">
                     <!-- Photos will be dynamically loaded here -->
                 </div>
+                <div class="gallery-load-more" id="galleryLoadMore" style="display: none;">
+                    <button class="btn btn-primary load-more-btn" id="loadMoreBtn">
+                        <i class="fas fa-arrow-down"></i>
+                        <span>Load More</span>
+                    </button>
+                </div>
             </div>
         </section>
 
@@ -106,11 +112,18 @@
                     <div class="map-filter-control">
                         <div class="filter-header">
                             <h3>Year Filter</h3>
+                            <button class="close-filter" onclick="toggleYearFilter()" title="Close filter">
+                                <i class="fas fa-times"></i>
+                            </button>
                         </div>
                         <div class="year-checkboxes" id="mapYearCheckboxes">
                             <!-- 年份选项将在这里动态生成 -->
                         </div>
                     </div>
+                    <button class="show-filter-btn" onclick="toggleYearFilter()" title="Show Year Filter">
+                        <i class="fas fa-filter"></i>
+                        <span>Year Filter</span>
+                    </button>
                     <div class="loading-overlay" id="loadingOverlay">
                         <div class="loading-spinner"></div>
                     </div>

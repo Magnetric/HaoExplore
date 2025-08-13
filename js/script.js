@@ -6,6 +6,8 @@ class PhotoGalleryApp {
     constructor() {
         this.currentFilteredGalleries = [];
         this.galleryMap = null;
+        this.currentDisplayCount = 10; // 初始显示数量
+        this.itemsPerLoad = 10; // 每次加载数量
         
         // DOM Elements
         this.galleryGrid = document.getElementById('galleryGrid');
@@ -13,6 +15,8 @@ class PhotoGalleryApp {
         this.locationFilter = document.getElementById('locationFilter');
         this.navToggle = document.getElementById('navToggle');
         this.navMenu = document.getElementById('navMenu');
+        this.loadMoreBtn = document.getElementById('loadMoreBtn');
+        this.galleryLoadMore = document.getElementById('galleryLoadMore');
         
         this.init();
     }
@@ -42,8 +46,16 @@ class PhotoGalleryApp {
             this.handleHeaderScroll();
         });
         
+        // Add resize event listener
+        window.addEventListener('resize', () => {
+            this.handleResize();
+        });
+        
         // Prevent drag on images
         document.addEventListener('dragstart', e => e.preventDefault());
+        
+        // Setup Load More button
+        this.setupLoadMoreButton();
     }
 
     async loadGalleriesFromAPI() {
@@ -72,18 +84,109 @@ class PhotoGalleryApp {
 
     loadGalleries() {
         this.galleryGrid.innerHTML = '';
+        this.currentDisplayCount = this.getInitialDisplayCount(); // 根据屏幕尺寸计算初始显示数量
         
         if (this.currentFilteredGalleries.length === 0) {
             this.galleryGrid.innerHTML = '<div class="no-results">No galleries found matching your criteria.</div>';
+            this.galleryLoadMore.style.display = 'none';
             console.log('No galleries to display');
             return;
         }
         
-        this.currentFilteredGalleries.forEach((gallery, index) => {
+        this.displayGalleries();
+        this.updateLoadMoreButton();
+        console.log('Galleries loaded successfully');
+    }
+    
+    getInitialDisplayCount() {
+        // 根据屏幕宽度计算应该显示的数量
+        const screenWidth = window.innerWidth;
+        if (screenWidth <= 768) {
+            return 6; // 移动端显示6个（约两行）
+        } else if (screenWidth <= 1200) {
+            return 8; // 中等屏幕显示8个
+        } else {
+            return 10; // 大屏幕显示10个（两行，每行5个）
+        }
+    }
+    
+    getItemsPerLoad() {
+        // 根据屏幕宽度计算每次加载的数量
+        const screenWidth = window.innerWidth;
+        if (screenWidth <= 768) {
+            return 6; // 移动端每次加载6个
+        } else if (screenWidth <= 1200) {
+            return 8; // 中等屏幕每次加载8个
+        } else {
+            return 10; // 大屏幕每次加载10个
+        }
+    }
+    
+    displayGalleries() {
+        // 清空现有内容
+        this.galleryGrid.innerHTML = '';
+        
+        const galleriesToShow = this.currentFilteredGalleries.slice(0, this.currentDisplayCount);
+        
+        galleriesToShow.forEach((gallery, index) => {
             const galleryElement = this.createGalleryElement(gallery, index);
             this.galleryGrid.appendChild(galleryElement);
         });
-        console.log('Galleries loaded successfully');
+    }
+    
+    updateLoadMoreButton() {
+        if (this.currentDisplayCount >= this.currentFilteredGalleries.length) {
+            this.galleryLoadMore.style.display = 'none';
+        } else {
+            this.galleryLoadMore.style.display = 'block';
+        }
+    }
+    
+    loadMoreGalleries() {
+        // 添加加载状态
+        this.loadMoreBtn.classList.add('loading');
+        this.loadMoreBtn.innerHTML = '<i class="fas fa-spinner"></i><span>Loading...</span>';
+        
+        // 模拟加载延迟，让用户看到加载效果
+        setTimeout(() => {
+            const previousCount = this.currentDisplayCount;
+            this.currentDisplayCount += this.getItemsPerLoad();
+            
+            // 只添加新的gallery
+            const newGalleries = this.currentFilteredGalleries.slice(previousCount, this.currentDisplayCount);
+            
+            newGalleries.forEach((gallery, index) => {
+                const actualIndex = previousCount + index;
+                const galleryElement = this.createGalleryElement(gallery, actualIndex);
+                this.galleryGrid.appendChild(galleryElement);
+            });
+            
+            this.updateLoadMoreButton();
+            
+            // 移除加载状态
+            this.loadMoreBtn.classList.remove('loading');
+            this.loadMoreBtn.innerHTML = '<i class="fas fa-arrow-down"></i><span>Load More</span>';
+        }, 300);
+    }
+    
+    setupLoadMoreButton() {
+        if (this.loadMoreBtn) {
+            this.loadMoreBtn.addEventListener('click', () => {
+                this.loadMoreGalleries();
+            });
+        }
+    }
+    
+    handleResize() {
+        // 防抖处理，避免频繁触发
+        clearTimeout(this.resizeTimeout);
+        this.resizeTimeout = setTimeout(() => {
+            const newInitialCount = this.getInitialDisplayCount();
+            if (newInitialCount !== this.currentDisplayCount) {
+                // 如果初始显示数量发生变化，重新加载gallery
+                this.loadGalleries();
+            }
+        }, 250);
     }
 
     createGalleryElement(gallery, index) {
@@ -166,6 +269,19 @@ class PhotoGalleryApp {
         // Add event listeners
         this.yearFilter.addEventListener('change', () => this.filterGalleries());
         this.locationFilter.addEventListener('change', () => this.filterGalleries());
+        
+        // Setup Clear Filters button
+        const clearFiltersBtn = document.getElementById('clearFilters');
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', () => this.clearFilters());
+        }
+    }
+    
+    clearFilters() {
+        this.yearFilter.value = '';
+        this.locationFilter.value = '';
+        this.currentFilteredGalleries = [...galleries];
+        this.loadGalleries();
     }
 
     filterGalleries() {
@@ -379,6 +495,9 @@ class GalleryMap {
             console.log('Zoom event triggered, current zoom level:', this.map.getZoom());
             this.updateMarkerSizes();
         });
+        
+        // 添加Year Filter的滚轮事件处理
+        this.setupYearFilterWheelEvents();
     }
 
     initFilterControls() {
@@ -430,6 +549,7 @@ class GalleryMap {
                 <label for="year-${year}">${year}</label>
                 <span class="count">${count}</span>
             `;
+            
             container.appendChild(option);
         });
     }
@@ -441,6 +561,119 @@ class GalleryMap {
                 this.handleYearFilterChange();
             });
         });
+    }
+    
+    setupYearFilterWheelEvents() {
+        const yearFilterContainer = document.querySelector('.map-filter-control');
+        if (!yearFilterContainer) return;
+        
+        console.log('Setting up wheel events for Year Filter container:', yearFilterContainer);
+        
+        // 为整个Year Filter容器添加滚轮事件处理
+        yearFilterContainer.addEventListener('wheel', (e) => {
+            console.log('Wheel event on main container');
+            e.stopPropagation();
+            e.preventDefault();
+            
+            // 手动处理滚动
+            const yearCheckboxes = yearFilterContainer.querySelector('.year-checkboxes');
+            if (yearCheckboxes) {
+                const scrollAmount = e.deltaY > 0 ? 30 : -30; // 滚动量
+                yearCheckboxes.scrollTop += scrollAmount;
+                console.log('Scrolled year checkboxes by:', scrollAmount, 'New scrollTop:', yearCheckboxes.scrollTop);
+            }
+        }, { passive: false });
+        
+        // 为Year Filter内的所有子元素添加滚轮事件处理
+        this.setupWheelEventForElement(yearFilterContainer);
+        
+        // 确保整个区域都能响应滚轮事件
+        this.ensureFullWheelCoverage(yearFilterContainer);
+        
+        console.log('Year Filter wheel events configured');
+    }
+    
+    setupWheelEventForElement(element) {
+        // 为元素及其所有子元素添加滚轮事件处理
+        const addWheelEvent = (el) => {
+            el.addEventListener('wheel', (e) => {
+                console.log('Wheel event on element:', el.tagName, el.className);
+                // 阻止事件冒泡到地图，但允许滚动处理
+                e.stopPropagation();
+                
+                // 查找最近的父级滚动容器
+                const scrollContainer = el.closest('.year-checkboxes') || 
+                                     el.closest('.map-filter-control');
+                
+                if (scrollContainer) {
+                    // 手动处理滚动
+                    const scrollAmount = e.deltaY > 0 ? 30 : -30;
+                    scrollContainer.scrollTop += scrollAmount;
+                    console.log('Scrolled container by:', scrollAmount, 'New scrollTop:', scrollContainer.scrollTop);
+                }
+                
+                // 阻止默认行为
+                e.preventDefault();
+            }, { passive: false });
+        };
+        
+        // 为当前元素添加
+        addWheelEvent(element);
+        
+        // 为所有子元素添加
+        const allChildren = element.querySelectorAll('*');
+        allChildren.forEach(child => {
+            addWheelEvent(child);
+        });
+        
+        // 监听新添加的元素
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        addWheelEvent(node);
+                        // 为新元素的子元素也添加事件
+                        const newChildren = node.querySelectorAll('*');
+                        newChildren.forEach(child => {
+                            addWheelEvent(child);
+                        });
+                    }
+                });
+            });
+        });
+        
+        observer.observe(element, {
+            childList: true,
+            subtree: true
+        });
+    }
+    
+    ensureFullWheelCoverage(container) {
+        // 确保整个容器区域都能响应滚轮事件
+        // 通过设置CSS属性来确保事件能被正确捕获
+        container.style.pointerEvents = 'auto';
+        
+        // 为容器的所有直接子元素添加滚轮事件处理
+        const directChildren = Array.from(container.children);
+        directChildren.forEach(child => {
+            if (child.tagName !== 'DIV' || !child.classList.contains('wheel-overlay')) {
+                child.addEventListener('wheel', (e) => {
+                    console.log('Wheel event on direct child:', child.tagName, child.className);
+                    e.stopPropagation();
+                    e.preventDefault();
+                    
+                    // 手动处理滚动
+                    const yearCheckboxes = container.querySelector('.year-checkboxes');
+                    if (yearCheckboxes) {
+                        const scrollAmount = e.deltaY > 0 ? 30 : -30;
+                        yearCheckboxes.scrollTop += scrollAmount;
+                        console.log('Scrolled via direct child by:', scrollAmount, 'New scrollTop:', yearCheckboxes.scrollTop);
+                    }
+                }, { passive: false });
+            }
+        });
+        
+        console.log('Enhanced wheel event coverage for container');
     }
     
     handleYearFilterChange() {
@@ -557,7 +790,6 @@ class GalleryMap {
             });
             
             marker.setIcon(newIcon);
-            console.log(`Marker ${index} updated to size ${newSize}px`);
         });
     }
 
@@ -924,6 +1156,46 @@ copyMessageStyle.textContent = `
         }
     }
     
-
+    @media (max-width: 768px) {
+        @keyframes slideIn {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateY(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+        }
+    }
 `;
 document.head.appendChild(copyMessageStyle);
+
+// Year Filter toggle function for mobile
+function toggleYearFilter() {
+    const filterControl = document.querySelector('.map-filter-control');
+    const showFilterBtn = document.querySelector('.show-filter-btn');
+    
+    if (filterControl && showFilterBtn) {
+        if (filterControl.style.display === 'none') {
+            // Show filter
+            filterControl.style.display = 'block';
+            showFilterBtn.style.display = 'none';
+        } else {
+            // Hide filter
+            filterControl.style.display = 'none';
+            showFilterBtn.style.display = 'flex';
+        }
+    }
+}

@@ -724,7 +724,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin-bottom: 0.5rem;
+    margin-top: 0.5rem;
     min-height: 2rem;
 }
 
@@ -760,17 +760,7 @@
     background-color: rgba(255, 255, 255, 0.2);
 }
 
-.add-year-form {
-    display: block;
-}
-
-.add-year-form select {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 0.9rem;
-}
+/* 移除add-year-form样式，因为不再使用这个容器 */
 
 /* Photo grid styles for gallery edit */
 .photo-item {

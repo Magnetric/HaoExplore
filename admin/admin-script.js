@@ -144,9 +144,27 @@ class AdminPanel {
         try {
             this.showMessage('Creating gallery...', 'info');
             
+            // Get coordinates for the gallery location
+            this.showMessage('📍 Getting location coordinates...', 'info');
+            const coordinates = await this.getCoordinates(galleryData.name, galleryData.country);
+            if (coordinates) {
+                galleryData.latitude = coordinates.lat;
+                galleryData.longitude = coordinates.lng;
+                console.log(`Got coordinates for ${galleryData.name}: ${coordinates.lat}, ${coordinates.lng}`);
+                this.showMessage('📍 Coordinates found! Creating gallery...', 'info');
+            } else {
+                console.warn(`Could not get coordinates for ${galleryData.name}, ${galleryData.country}`);
+                this.showMessage('⚠️ Could not get coordinates, creating gallery without location...', 'warning');
+            }
+            
             const result = await this.api.createGallery(galleryData);
             console.log('Gallery created successfully:', result);
-            this.showMessage('✅ Gallery created successfully!', 'success');
+            
+            if (coordinates) {
+                this.showMessage('✅ Gallery created successfully with location!', 'success');
+            } else {
+                this.showMessage('✅ Gallery created successfully! (No location data)', 'success');
+            }
             
             // Clear form and refresh list
             this.clearCreateGalleryForm();
@@ -160,6 +178,40 @@ class AdminPanel {
             console.error('Error creating gallery:', error);
             this.showMessage('❌ Error creating gallery: ' + error.message, 'error');
             throw error;
+        }
+    }
+    
+    async getCoordinates(galleryName, country) {
+        try {
+            // Add a small delay to respect rate limits
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const query = country ? `${galleryName}, ${country}` : galleryName;
+            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+            
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': 'my-photo-app/1.0 (contact@example.com)'
+                }
+            });
+            
+            if (!response.ok) {
+                console.warn('Geocoding service not available');
+                return null;
+            }
+            
+            const data = await response.json();
+            if (data && data.length > 0) {
+                return {
+                    lat: parseFloat(data[0].lat),
+                    lng: parseFloat(data[0].lon)
+                };
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Error getting coordinates:', error);
+            return null;
         }
     }
 
@@ -195,6 +247,7 @@ class AdminPanel {
 
     async deleteGallery(galleryId) {
         try {
+            console.log('deleteGallery called with galleryId:', galleryId);
             this.showMessage('Deleting gallery...', 'info');
             
             const result = await this.api.deleteGallery(galleryId);
@@ -271,6 +324,7 @@ class AdminPanel {
                         </div>
                         <div style="color: rgba(255,255,255,0.8); font-size: 0.85rem; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">
                             Photos: ${gallery.photoCount || 0} | Created: ${new Date(gallery.createdAt).toLocaleDateString()}
+                            ${gallery.latitude && gallery.longitude ? ' | 📍 Has location' : ' | ❌ No location'}
                         </div>
                     </div>
                 </div>
@@ -685,7 +739,12 @@ class AdminPanel {
     }
 
     deleteGalleryConfirm(galleryId) {
-        const gallery = this.galleries.find(g => g.id === galleryId);
+        console.log('deleteGalleryConfirm called with galleryId:', galleryId);
+        console.log('Available galleries:', this.galleries);
+        
+        const gallery = this.galleries.find(g => g.galleryId === galleryId);
+        console.log('Found gallery:', gallery);
+        
         if (!gallery) {
             this.showMessage('❌ Gallery not found', 'error');
             return;
@@ -806,18 +865,26 @@ class GalleryAPI {
 
     async createGallery(galleryData) {
         try {
+            const requestBody = {
+                name: galleryData.name,
+                continent: galleryData.continent,
+                country: galleryData.country,
+                description: galleryData.description || '',
+                years: galleryData.years || []
+            };
+            
+            // Add coordinates if available
+            if (galleryData.latitude && galleryData.longitude) {
+                requestBody.latitude = galleryData.latitude;
+                requestBody.longitude = galleryData.longitude;
+            }
+            
             const response = await fetch(`${this.baseUrl}/galleries`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    name: galleryData.name,
-                    continent: galleryData.continent,
-                    country: galleryData.country,
-                    description: galleryData.description || '',
-                    years: galleryData.years || []
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
@@ -888,16 +955,26 @@ class GalleryAPI {
 
     async deleteGallery(galleryId) {
         try {
-            const response = await fetch(`${this.baseUrl}/galleries?id=${galleryId}`, {
+            console.log('API deleteGallery called with galleryId:', galleryId);
+            const url = `${this.baseUrl}/galleries?id=${galleryId}`;
+            console.log('DELETE request URL:', url);
+            
+            const response = await fetch(url, {
                 method: 'DELETE'
             });
             
+            console.log('DELETE response status:', response.status);
+            console.log('DELETE response ok:', response.ok);
+            
             if (!response.ok) {
                 const error = await response.json();
+                console.log('DELETE error response:', error);
                 throw new Error(error.error || 'Failed to delete gallery');
             }
 
-            return await response.json();
+            const result = await response.json();
+            console.log('DELETE success response:', result);
+            return result;
         } catch (error) {
             console.error('Error deleting gallery:', error);
             throw error;
