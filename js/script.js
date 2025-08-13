@@ -832,18 +832,22 @@ function showCopySuccess() {
     const message = document.createElement('div');
     message.className = 'copy-message copy-success';
     message.innerHTML = '<i class="fas fa-check"></i> Wechat ID copied';
+    
+    // 移动端适配的消息样式
+    const isMobile = window.innerWidth <= 768;
     message.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: ${isMobile ? '10px' : '20px'};
+        ${isMobile ? 'left: 10px; right: 10px;' : 'right: 20px;'}
         background: #27ae60;
         color: white;
-        padding: 12px 20px;
+        padding: ${isMobile ? '10px 15px' : '12px 20px'};
         border-radius: 8px;
-        font-size: 14px;
+        font-size: ${isMobile ? '13px' : '14px'};
         z-index: 10000;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         animation: slideIn 0.3s ease-out;
+        text-align: center;
     `;
     
     document.body.appendChild(message);
@@ -864,18 +868,22 @@ function showCopyError() {
     const message = document.createElement('div');
     message.className = 'copy-message copy-error';
     message.innerHTML = '<i class="fas fa-times"></i> 复制失败，请手动复制：Magnetrician';
+    
+    // 移动端适配的消息样式
+    const isMobile = window.innerWidth <= 768;
     message.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: ${isMobile ? '10px' : '20px'};
+        ${isMobile ? 'left: 10px; right: 10px;' : 'right: 20px;'}
         background: #e74c3c;
         color: white;
-        padding: 12px 20px;
+        padding: ${isMobile ? '10px 15px' : '12px 20px'};
         border-radius: 8px;
-        font-size: 14px;
+        font-size: ${isMobile ? '13px' : '14px'};
         z-index: 10000;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         animation: slideIn 0.3s ease-out;
+        text-align: center;
     `;
     
     document.body.appendChild(message);

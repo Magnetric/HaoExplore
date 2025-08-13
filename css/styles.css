@@ -18,6 +18,19 @@ body {
     padding: 0 20px;
 }
 
+/* 移动端container优化 */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 0 10px;
+    }
+}
+
 /* Header Styles */
 .header {
     background: rgba(255, 255, 255, 0.95);
@@ -206,6 +219,38 @@ body {
 }
 
 .social-link:hover i {
+    transform: scale(1.1);
+}
+
+/* 确保button元素在social-links中也能正确显示 */
+button.social-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    color: white;
+    text-decoration: none;
+    font-size: 1.2rem;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    font-family: inherit;
+    outline: none;
+    margin: 0;
+    padding: 0;
+}
+
+button.social-link:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+button.social-link:hover i {
     transform: scale(1.1);
 }
 
@@ -820,6 +865,33 @@ body {
         height: 45px;
         font-size: 1.1rem;
     }
+    
+    button.social-link {
+        width: 45px;
+        height: 45px;
+        font-size: 1.1rem;
+    }
+    
+    /* 移动端触摸优化 */
+    @media (hover: none) and (pointer: coarse) {
+        .social-link:hover {
+            transform: none;
+        }
+        
+        .social-link:active {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0.95);
+        }
+        
+        button.social-link:hover {
+            transform: none;
+        }
+        
+        button.social-link:active {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0.95);
+        }
+    }
 
     /* Filter Section Mobile Optimization */
     .filter-section {
@@ -939,6 +1011,12 @@ body {
     }
     
     .social-link {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+    
+    button.social-link {
         width: 40px;
         height: 40px;
         font-size: 1rem;
@@ -1931,7 +2009,7 @@ body {
 .contact-content {
     position: relative;
     z-index: 3;
-    width: 150%;           /* 这里控制宽度 */
+    width: 100%;           /* 改为100%，避免水平滚动 */
     max-width: 1600px;     /* 这里控制最大宽度 */
     margin: 0 auto;
     padding: 2rem;
@@ -1962,12 +2040,21 @@ body {
 
 .contact-grid {
     display: grid;
-    grid-template-columns: 1fr 0.5fr;
+    grid-template-columns: 1fr 0.4fr;
     gap: 4rem;
     max-width: 2000px;
     margin: 0 auto;
     align-items: center;
     justify-items: center;  /* 添加这行，让网格项目居中 */
+}
+
+/* 确保在小屏幕上网格布局正确 */
+@media (max-width: 768px) {
+    .contact-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+        justify-items: stretch;
+    }
 }
 
 .contact-photo {
@@ -1993,9 +2080,12 @@ body {
 
 .photographer-image {
     width: 100%;  /* 改为100%，适应容器宽度 */
-    height: 730px;
+    height: 750px;
     object-fit: cover;
     display: block;
+    /* 移动端图片优化 */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
 }
 
 .contact-collaborate {
@@ -2105,6 +2195,26 @@ body {
     box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
 }
 
+/* 移动端触摸优化 */
+@media (hover: none) and (pointer: coarse) {
+    .contact-link:hover {
+        transform: none;
+    }
+    
+    .contact-link:active {
+        background: rgba(102, 126, 234, 0.15);
+        transform: scale(0.98);
+    }
+    
+    .contact-card:hover {
+        transform: none;
+    }
+    
+    .photo-container:hover {
+        transform: none;
+    }
+}
+
 .contact-link i {
     font-size: 1.2rem;
     color: #667eea;
@@ -2144,6 +2254,18 @@ button.contact-link:hover {
     box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
 }
 
+/* 移动端触摸优化 - button版本 */
+@media (hover: none) and (pointer: coarse) {
+    button.contact-link:hover {
+        transform: none;
+    }
+    
+    button.contact-link:active {
+        background: rgba(102, 126, 234, 0.15);
+        transform: scale(0.98);
+    }
+}
+
 button.contact-link i {
     font-size: 1.2rem;
     color: #667eea;
@@ -2169,11 +2291,19 @@ button.contact-link span {
     .contact-title {
         font-size: 3rem;
     }
+    
+    .contact-content {
+        padding: 1.5rem;
+    }
 }
 
 @media (max-width: 768px) {
     .contact {
         padding: 4rem 0;
+    }
+    
+    .contact-content {
+        padding: 1rem;
     }
     
     .contact-title {
@@ -2208,6 +2338,19 @@ button.contact-link span {
     .contact-grid {
         gap: 2rem;
     }
+    
+    .contact-links {
+        gap: 0.8rem;
+    }
+    
+    .contact-link {
+        padding: 0.9rem 1.2rem;
+        font-size: 0.95rem;
+    }
+    
+    .contact-link i {
+        font-size: 1.1rem;
+    }
 }
 
 @media (max-width: 480px) {
@@ -2215,16 +2358,49 @@ button.contact-link span {
         padding: 3rem 0;
     }
     
+    .contact-content {
+        padding: 0.5rem;
+    }
+    
     .contact-title {
         font-size: 2rem;
+    }
+    
+    .contact-subtitle {
+        font-size: 1rem;
     }
     
     .contact-card {
         padding: 1.5rem;
     }
     
+    .contact-icon {
+        width: 45px;
+        height: 45px;
+        margin-bottom: 1rem;
+    }
+    
+    .contact-icon i {
+        font-size: 1rem;
+    }
+    
+    .contact-card h3 {
+        font-size: 1.2rem;
+    }
+    
+    .contact-card p {
+        font-size: 0.95rem;
+        line-height: 1.6;
+    }
+    
     .contact-link {
         padding: 0.8rem 1rem;
+        font-size: 0.9rem;
+    }
+    
+    .contact-link i {
+        font-size: 1rem;
+        width: 18px;
     }
     
     .photographer-image {
@@ -2233,5 +2409,164 @@ button.contact-link span {
     
     .photo-container {
         border-radius: 16px;
+    }
+    
+    .contact-links {
+        gap: 0.6rem;
+        margin-top: 1rem;
+    }
+    
+    button.contact-link {
+        padding: 0.8rem 1rem;
+        font-size: 0.9rem;
+    }
+    
+    button.contact-link i {
+        font-size: 1rem;
+        width: 18px;
+    }
+}
+
+/* 超小屏幕设备适配 */
+@media (max-width: 360px) {
+    .hero-title {
+        font-size: 1.8rem;
+    }
+    
+    .hero-subtitle {
+        font-size: 0.9rem;
+    }
+    
+    .social-links {
+        gap: 0.8rem;
+        margin-top: 1.2rem;
+    }
+    
+    .social-link {
+        width: 35px;
+        height: 35px;
+        font-size: 0.9rem;
+    }
+    
+    button.social-link {
+        width: 35px;
+        height: 35px;
+        font-size: 0.9rem;
+    }
+    
+    .contact {
+        padding: 2rem 0;
+    }
+    
+    .contact-content {
+        padding: 0.3rem;
+    }
+    
+    .contact-title {
+        font-size: 1.8rem;
+    }
+    
+    .contact-subtitle {
+        font-size: 0.9rem;
+    }
+    
+    .contact-card {
+        padding: 1.2rem;
+    }
+    
+    .contact-icon {
+        width: 40px;
+        height: 40px;
+        margin-bottom: 0.8rem;
+    }
+    
+    .contact-icon i {
+        font-size: 0.9rem;
+    }
+    
+    .contact-card h3 {
+        font-size: 1.1rem;
+    }
+    
+    .contact-card p {
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+    
+    .contact-link {
+        padding: 0.7rem 0.8rem;
+        font-size: 0.85rem;
+    }
+    
+    .contact-link i {
+        font-size: 0.9rem;
+        width: 16px;
+    }
+    
+    .photographer-image {
+        height: 250px;
+    }
+    
+    .contact-links {
+        gap: 0.5rem;
+        margin-top: 0.8rem;
+    }
+    
+    button.contact-link {
+        padding: 0.7rem 0.8rem;
+        font-size: 0.85rem;
+    }
+    
+    button.contact-link i {
+        font-size: 0.9rem;
+        width: 16px;
+    }
+}
+
+/* Copy message animations */
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* 移动端消息动画优化 */
+@media (max-width: 768px) {
+    @keyframes slideIn {
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOut {
+        from {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
     }
 }
