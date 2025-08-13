@@ -369,7 +369,7 @@ class AdminPanel {
     // ==================== UTILITY FUNCTIONS ====================
     
     getCoverPhotoThumbnail(gallery) {
-        // 直接使用DynamoDB中的coverPhotoURL字段
+        // Directly use the coverPhotoURL field from DynamoDB
         return gallery.coverPhotoURL || '';
     }
 
@@ -540,8 +540,8 @@ class AdminPanel {
     }
 
     showCoverPhotoModal(galleryId) {
-        // 这个方法用于显示封面照片选择模态框
-        // 暂时显示一个简单的消息，你可以根据需要实现完整的模态框
+        // This method is used to display the cover photo selection modal
+        // For now, it shows a simple message. You can implement the complete modal as needed
         this.showMessage('Cover photo selection feature coming soon...', 'info');
     }
 

@@ -82,6 +82,35 @@ let originalPhotos = []; // Store original photo data to detect changes
 let isFormModified = false; // Track form modification state
 
 // ==================== UTILITY FUNCTIONS ====================
+// Compress image before upload to reduce payload size
+async function compressImage(file, maxWidth = 1920, quality = 0.8) {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        img.onload = function() {
+            // Calculate new dimensions maintaining aspect ratio
+            let { width, height } = img;
+            if (width > maxWidth) {
+                height = (height * maxWidth) / width;
+                width = maxWidth;
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Draw and compress
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+                resolve(blob);
+            }, 'image/jpeg', quality);
+        };
+        
+        img.src = URL.createObjectURL(file);
+    });
+}
+
 // Normalize gallery object returned from DynamoDB to the shape the editor expects
 function normalizeGalleryFromDynamoDB(gallery) {
     if (!gallery) return gallery;
@@ -488,13 +517,12 @@ async function uploadPhotos() {
             uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
         }
         
-        // Process files and convert to base64
+        // Process files and convert to base64 with compression
         const photosData = [];
         let totalSize = 0;
         
         for (let i = 0; i < photosToUpload.length; i++) {
             const photo = photosToUpload[i];
-            totalSize += photo.size;
             
             // Validate file size (50MB limit)
             if (photo.size > 50 * 1024 * 1024) {
@@ -502,13 +530,25 @@ async function uploadPhotos() {
                 continue;
             }
             
-            // Convert file to base64
-            const base64Data = await fileToBase64(photo);
-            photosData.push({
-                filename: photo.name,
-                image: base64Data,
-                contentType: photo.type
-            });
+            try {
+                // Compress image before upload
+                const compressedBlob = await compressImage(photo);
+                totalSize += compressedBlob.size;
+                
+                // Convert compressed file to base64
+                const base64Data = await fileToBase64(compressedBlob);
+                photosData.push({
+                    filename: photo.name.replace(/\.[^/.]+$/, '.jpg'), // Change extension to .jpg
+                    image: base64Data,
+                    contentType: 'image/jpeg'
+                });
+                
+                console.log(`Compressed ${photo.name}: ${(photo.size / 1024 / 1024).toFixed(2)}MB -> ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB`);
+            } catch (error) {
+                console.error(`Error processing ${photo.name}:`, error);
+                showMessage(`Error processing ${photo.name}: ${error.message}`, 'error');
+                continue;
+            }
             
             // Update progress
             const progress = ((i + 1) / photosToUpload.length) * 100;
@@ -525,27 +565,48 @@ async function uploadPhotos() {
         console.log('Sending upload request to Lambda API...');
         console.log('Gallery ID:', currentGallery.id);
         console.log('Photos count:', photosData.length);
+        console.log('Total payload size:', (totalSize / 1024 / 1024).toFixed(2), 'MB');
 
-        const response = await fetch(`${API_BASE_URL}/galleries?id=${currentGallery.id}&action=upload_photos`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                photos: photosData
-            })
-        });
-        
-        console.log('Response status:', response.status);
-        console.log('Response ok:', response.ok);
-        
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Upload failed with error:', errorData);
-            throw new Error(errorData.error || 'Upload failed');
+        let result;
+        try {
+            const response = await fetch(`${API_BASE_URL}/galleries?id=${currentGallery.id}&action=upload_photos`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    photos: photosData
+                })
+            });
+            
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
+            
+            if (!response.ok) {
+                let errorMessage = 'Upload failed';
+                try {
+                    const errorData = await response.json();
+                    console.error('Upload failed with error:', errorData);
+                    errorMessage = errorData.error || errorMessage;
+                } catch (parseError) {
+                    console.error('Could not parse error response:', parseError);
+                    if (response.status === 413) {
+                        errorMessage = 'File too large for upload. Please try smaller images.';
+                    } else if (response.status === 0) {
+                        errorMessage = 'Network error. Please check your connection.';
+                    } else {
+                        errorMessage = `Upload failed with status: ${response.status}`;
+                    }
+                }
+                throw new Error(errorMessage);
+            }
+            
+            result = await response.json();
+        } catch (fetchError) {
+            console.error('Fetch error:', fetchError);
+            throw new Error('Network error: ' + fetchError.message);
         }
         
-        const result = await response.json();
         console.log('Upload successful, result:', result);
         
         // Add uploaded photos to current gallery

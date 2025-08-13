@@ -114,15 +114,18 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div class="upload-area" onclick="document.getElementById('photoUpload').click()">
-                    <div class="upload-icon">
-                        <i class="fas fa-cloud-upload-alt"></i>
+                                    <div class="upload-info">
+                        <p><i class="fas fa-info-circle"></i> <strong>Upload Guidelines:</strong></p>
+                        <ul>
+                            <li>Maximum file size: <strong>50MB per photo</strong></li>
+                            <li>Supported formats: JPEG, PNG, WebP, AVIF</li>
+                            <li>Images will be automatically compressed to reduce upload time</li>
+                            <li>Large images will be resized to max 1920px width</li>
+                        </ul>
                     </div>
-                    <div class="upload-text">
-                        <p>Click to select photos or drag and drop here</p>
-                        <p><small>Supports JPG, PNG, WebP (Max 50MB each)</small></p>
-                    </div>
-                    <input type="file" id="photoUpload" class="upload-input" multiple accept="image/*" onchange="handleFileSelect(event)">
+                <div class="form-group">
+                    <label for="photoUpload" class="form-label">Select Photos</label>
+                    <input type="file" id="photoUpload" class="form-control" multiple accept="image/*" onchange="handleFileSelect(event)">
                 </div>
                 <button class="upload-btn" id="uploadBtn" onclick="uploadPhotos()" disabled>
                     <i class="fas fa-upload"></i> Upload Photos

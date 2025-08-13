@@ -15,7 +15,7 @@ import json
 import urllib.parse
 import urllib.request
 
-# 进程内缓存 + 节流
+# In-process cache + throttling
 _geocode_cache = {}
 _last_geocode_ts = 0
 
@@ -268,7 +268,7 @@ def get_gallery(gallery_id):
     Get a specific gallery by ID from DynamoDB
     """
     try:
-        # 从 galleries 表读取画廊基础信息
+        # Read gallery basic information from galleries table
         resp = tbl_galleries.get_item(Key={'galleryId': str(gallery_id)})
         if 'Item' not in resp:
             return create_response(404, {'error': 'Gallery not found'})
@@ -276,7 +276,7 @@ def get_gallery(gallery_id):
         gallery = resp['Item']
         logger.info(f"Gallery: {gallery}")
 
-        # 查询该画廊的照片
+        # Query photos for this gallery
         from boto3.dynamodb.conditions import Key
         photos_resp = tbl_gallery_photos.query(
             KeyConditionExpression=Key('galleryId').eq(str(gallery_id)),
@@ -284,11 +284,11 @@ def get_gallery(gallery_id):
         )
         gallery['photos'] = photos_resp.get('Items', [])
 
-        # 确保兼容字段
+        # Ensure compatibility fields
         gallery['id'] = gallery.get('galleryId', str(gallery_id))
         gallery['photoCount'] = len(gallery['photos'])
 
-        # 如果缺少 coverPhotoURL 且有照片，则自动设置第一张照片的缩略图URL
+        # If coverPhotoURL is missing and there are photos, automatically set the first photo's thumbnail URL
         if not gallery.get('coverPhotoURL') and gallery['photos']:
             first_photo = gallery['photos'][0]
             first_thumbnail = first_photo.get('thumbnail')
@@ -585,7 +585,7 @@ def upload_photos(gallery_id, upload_data):
     try:
         logger.info(f"Starting photo upload for gallery ID: {gallery_id}")
         
-        # 从 DynamoDB 获取画廊信息
+        # Get gallery information from DynamoDB
         dg = tbl_galleries.get_item(Key={'galleryId': str(gallery_id)})
         if 'Item' not in dg:
             return create_response(404, {'error': 'Gallery not found'})
@@ -593,10 +593,25 @@ def upload_photos(gallery_id, upload_data):
 
         gallery_path = f"galleries/{gallery['continent']}/{gallery['country']}/{gallery['name']}"
         
-        # 检查上传数据
+        # Check upload data
         photos_data = upload_data.get('photos', [])
         if not photos_data:
             return create_response(400, {'error': 'No photos data provided'})
+        
+        # Check total payload size (limit to 50MB per photo, 100MB total)
+        total_size = 0
+        for photo_data in photos_data:
+            image_data = photo_data.get('image', '')
+            if image_data:
+                # Estimate size from base64 (roughly 4/3 of base64 length)
+                estimated_size = len(image_data) * 3 // 4
+                total_size += estimated_size
+                
+                if estimated_size > 50 * 1024 * 1024:  # 50MB per photo
+                    return create_response(413, {'error': f'Photo {photo_data.get("filename", "unknown")} is too large (max 50MB)'})
+        
+        if total_size > 100 * 1024 * 1024:  # 100MB total
+            return create_response(413, {'error': 'Total upload size too large (max 100MB)'})
         
         uploaded_photos = []
         
@@ -613,11 +628,11 @@ def upload_photos(gallery_id, upload_data):
             if file_extension not in ['jpg', 'jpeg', 'png', 'webp', 'avif']:
                 continue
                 
-            # 生成唯一文件名
+            # Generate unique filename
             unique_id = str(uuid.uuid4())
             s3_key = f'{gallery_path}/{unique_id}.{file_extension}'
 
-            # 上传原图
+            # Upload original image
             import base64
             image_bytes = base64.b64decode(image_data.split(',')[1] if ',' in image_data else image_data)
             s3_client.put_object(
@@ -631,7 +646,7 @@ def upload_photos(gallery_id, upload_data):
                 }
             )
                 
-            # 生成缩略图
+            # Generate thumbnail
             thumb_url = None
             try:
                 base_image = Image.open(io.BytesIO(image_bytes))
@@ -814,8 +829,9 @@ def create_response(status_code, body):
         'headers': {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',  # Configure this for your domain
-            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Origin',
+            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+            'Access-Control-Max-Age': '86400'  # Cache preflight for 24 hours
         },
         'body': json.dumps(_convert_decimals(body), ensure_ascii=False)
     }

@@ -1,351 +1,310 @@
 // Gallery data - will be loaded from API
 let galleries = [];
 
-// Load galleries from API
-async function loadGalleriesFromAPI() {
-    try {
-        console.log('Loading galleries from API...');
+// Main Application Class
+class PhotoGalleryApp {
+    constructor() {
+        this.currentFilteredGalleries = [];
+        this.galleryMap = null;
         
-        const API_BASE_URL = 'https://5nuxhstp12.execute-api.eu-north-1.amazonaws.com/prod';
-        const response = await fetch(`${API_BASE_URL}/galleries`);
+        // DOM Elements
+        this.galleryGrid = document.getElementById('galleryGrid');
+        this.yearFilter = document.getElementById('yearFilter');
+        this.locationFilter = document.getElementById('locationFilter');
+        this.navToggle = document.getElementById('navToggle');
+        this.navMenu = document.getElementById('navMenu');
         
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        this.init();
+    }
+
+    async init() {
+        console.log('Starting application initialization...');
+        
+        // Load galleries from API
+        await this.loadGalleriesFromAPI();
+        
+        this.currentFilteredGalleries = [...galleries];
+        console.log('Initialized with galleries:', galleries.length, 'Filtered:', this.currentFilteredGalleries.length);
+        
+        this.loadGalleries();
+        this.setupFilters();
+        this.setupNavigation();
+        this.setupSmoothScrolling();
+        
+        // Initialize map immediately if galleries exist
+        if (galleries.length > 0) {
+            this.initMap();
         }
         
-        const data = await response.json();
-        galleries = data.galleries || [];
+        // Add scroll event listeners
+        window.addEventListener('scroll', () => {
+            this.updateActiveNavLink();
+            this.handleHeaderScroll();
+        });
         
-        console.log('Successfully loaded galleries from API:', galleries.length);
-        return true;
+        // Prevent drag on images
+        document.addEventListener('dragstart', e => e.preventDefault());
+    }
+
+    async loadGalleriesFromAPI() {
+        try {
+            console.log('Loading galleries from API...');
+            
+            const API_BASE_URL = 'https://5nuxhstp12.execute-api.eu-north-1.amazonaws.com/prod';
+            const response = await fetch(`${API_BASE_URL}/galleries`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            galleries = data.galleries || [];
+            
+            console.log('Successfully loaded galleries from API:', galleries.length);
+            return true;
+            
+        } catch (error) {
+            console.error('Error loading galleries from API:', error);
+            galleries = [];
+            return false;
+        }
+    }
+
+    loadGalleries() {
+        this.galleryGrid.innerHTML = '';
         
-    } catch (error) {
-        console.error('Error loading galleries from API:', error);
-        return false;
+        if (this.currentFilteredGalleries.length === 0) {
+            this.galleryGrid.innerHTML = '<div class="no-results">No galleries found matching your criteria.</div>';
+            console.log('No galleries to display');
+            return;
+        }
+        
+        this.currentFilteredGalleries.forEach((gallery, index) => {
+            const galleryElement = this.createGalleryElement(gallery, index);
+            this.galleryGrid.appendChild(galleryElement);
+        });
+        console.log('Galleries loaded successfully');
     }
-}
 
-
-
-// DOM Elements
-const galleryGrid = document.getElementById('galleryGrid');
-const yearFilter = document.getElementById('yearFilter');
-const locationFilter = document.getElementById('locationFilter');
-const clearFiltersBtn = document.getElementById('clearFilters');
-const navToggle = document.getElementById('navToggle');
-const navMenu = document.getElementById('navMenu');
-
-// Debug DOM elements
-console.log('DOM Elements found:', {
-    galleryGrid: !!galleryGrid,
-    yearFilter: !!yearFilter,
-    locationFilter: !!locationFilter,
-    clearFiltersBtn: !!clearFiltersBtn,
-    navToggle: !!navToggle,
-    navMenu: !!navMenu
-});
-
-// State
-let currentFilteredGalleries = [];
-
-// Initialize the application
-async function init() {
-    console.log('Starting application initialization...');
-    
-    // Load galleries from API
-    const apiSuccess = await loadGalleriesFromAPI();
-    
-    if (!apiSuccess) {
-        console.log('API loading failed, using empty galleries array');
-        galleries = [];
-    }
-    
-    currentFilteredGalleries = [...galleries];
-    console.log('Initialized with galleries:', galleries.length, 'Filtered:', currentFilteredGalleries.length);
-    loadGalleries();
-    setupFilters();
-    setupNavigation();
-    setupSmoothScrolling();
-    
-    // 立即初始化地图，不需要延迟
-    if (galleries.length > 0) {
-        initMap();
-    }
-}
-
-// Load galleries into the gallery grid
-function loadGalleries() {
-    galleryGrid.innerHTML = '';
-    
-    if (currentFilteredGalleries.length === 0) {
-        galleryGrid.innerHTML = '<div class="no-results">No galleries found matching your criteria.</div>';
-        console.log('No galleries to display');
-        return;
-    }
-    currentFilteredGalleries.forEach((gallery, index) => {
-        const galleryElement = createGalleryElement(gallery, index);
-        galleryGrid.appendChild(galleryElement);
-    });
-    console.log('Galleries loaded successfully');
-}
-
-// Create a gallery element
-function createGalleryElement(gallery, index) {
-    const article = document.createElement('article');
-    article.className = 'gallery-item';
-    article.setAttribute('data-index', index);
-    
-    // Use coverPhotoURL if available, otherwise use a placeholder
-    const coverImage = gallery.coverPhotoURL || 'images/placeholder.jpg';
-
-    // Format location and year from API data
-    const location = gallery.continent;
-    
-    // Extract latest year from years array
-    let year = '';
-    if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
-        // Sort years in descending order and get the latest (first one)
-        const sortedYears = gallery.years.sort((a, b) => parseInt(b) - parseInt(a));
-        year = sortedYears[0];
-    } else {
-        year = new Date(gallery.createdAt).getFullYear();
-    }
-    
-    const photoCount = gallery.photoCount || 0;
-    
-    article.innerHTML = `
-        <img src="${coverImage}" alt="${gallery.name}" loading="lazy" onerror="this.src='images/placeholder.jpg'">
-        <div class="gallery-info">
-            <h3 class="gallery-title">${gallery.name}</h3>
-            <div class="gallery-meta">
-                <span><i class="fas fa-map-marker-alt"></i> ${location}</span>
-                <span><i class="fas fa-calendar"></i> ${year}</span>
-                <span><i class="fas fa-images"></i> ${photoCount} photos</span>
-            </div>
-        </div>
-    `;
-    
-    article.addEventListener('click', () => {
-        window.location.href = `gallery.html?gallery=${gallery.galleryId || gallery.id}`;
-    });
-    return article;
-}
-
-// Setup filters
-function setupFilters() {
-    
-    // Clear existing options
-    yearFilter.innerHTML = '<option value="">All Years</option>';
-    locationFilter.innerHTML = '<option value="">All Locations</option>';
-    
-    // Populate year filter from years array - include all years from all galleries
-    const allYears = [];
-    galleries.forEach(gallery => {
+    createGalleryElement(gallery, index) {
+        const article = document.createElement('article');
+        article.className = 'gallery-item';
+        article.setAttribute('data-index', index);
+        
+        // Use coverPhotoURL if available, otherwise use a placeholder
+        const coverImage = gallery.coverPhotoURL || 'images/placeholder.jpg';
+        const location = gallery.continent;
+        
+        // Extract latest year from years array
+        let year = '';
         if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
-            // Add all years from this gallery
-            gallery.years.forEach(year => {
-                allYears.push(parseInt(year));
-            });
+            const sortedYears = gallery.years.sort((a, b) => parseInt(b) - parseInt(a));
+            year = sortedYears[0];
         } else {
-            // Fallback to createdAt if no years
-            const fallbackYear = new Date(gallery.createdAt).getFullYear();
-            allYears.push(fallbackYear);
-        }
-    });
-    
-    // Remove duplicates and sort in descending order
-    const years = [...new Set(allYears)].sort((a, b) => b - a);
-    
-    console.log('Available years for filter:', years);
-    years.forEach(year => {
-        const option = document.createElement('option');
-        option.value = year;
-        option.textContent = year;
-        yearFilter.appendChild(option);
-    });
-    
-    // Populate location filter with continents
-    const locations = [...new Set(galleries.map(gallery => gallery.continent || gallery.country || 'Unknown'))].sort();
-    console.log('Available locations for filter:', locations);
-    locations.forEach(location => {
-        const option = document.createElement('option');
-        option.value = location;
-        option.textContent = location;
-        locationFilter.appendChild(option);
-    });
-    
-    // Add event listeners
-    yearFilter.addEventListener('change', filterGalleries);
-    locationFilter.addEventListener('change', filterGalleries);
-    // clearFiltersBtn.addEventListener('click', clearFilters); // Removed as per edit hint
-}
-
-// Filter galleries based on selected criteria
-function filterGalleries() {
-    const selectedYear = yearFilter.value;
-    const selectedLocation = locationFilter.value;
-    
-    currentFilteredGalleries = galleries.filter(gallery => {
-        // Check year from years array
-        let yearMatch = !selectedYear;
-        if (selectedYear) {
-            if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
-                // Check if the selected year is present in the gallery's years array
-                yearMatch = gallery.years.includes(selectedYear.toString());
-            } else {
-                // Fallback to createdAt if no years
-                yearMatch = new Date(gallery.createdAt).getFullYear() == selectedYear;
-            }
+            year = new Date(gallery.createdAt).getFullYear();
         }
         
-        const locationMatch = !selectedLocation || (gallery.continent || gallery.country || 'Unknown') === selectedLocation;
-        return yearMatch && locationMatch;
-    });
-    
-    loadGalleries();
-}
-
-// Clear all filters
-function clearFilters() {
-    yearFilter.value = '';
-    locationFilter.value = '';
-    currentFilteredGalleries = [...galleries];
-    loadGalleries();
-}
-
-// Note: Lightbox functionality has been replaced with individual gallery pages
-
-// Setup mobile navigation
-function setupNavigation() {
-    navToggle.addEventListener('click', () => {
-        navMenu.classList.toggle('active');
-        navToggle.classList.toggle('active');
-    });
-    
-    // Close mobile menu when clicking on a link
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.addEventListener('click', () => {
-            navMenu.classList.remove('active');
-            navToggle.classList.remove('active');
+        const photoCount = gallery.photoCount || 0;
+        
+        article.innerHTML = `
+            <img src="${coverImage}" alt="${gallery.name}" loading="lazy" onerror="this.src='images/placeholder.jpg'">
+            <div class="gallery-info">
+                <h3 class="gallery-title">${gallery.name}</h3>
+                <div class="gallery-meta">
+                    <span><i class="fas fa-map-marker-alt"></i> ${location}</span>
+                    <span><i class="fas fa-calendar"></i> ${year}</span>
+                    <span><i class="fas fa-images"></i> ${photoCount} photos</span>
+                </div>
+            </div>
+        `;
+        
+        article.addEventListener('click', () => {
+            window.location.href = `gallery.html?gallery=${gallery.galleryId || gallery.id}`;
         });
-    });
-    
-    // Close mobile menu when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!navToggle.contains(e.target) && !navMenu.contains(e.target)) {
-            navMenu.classList.remove('active');
-            navToggle.classList.remove('active');
-        }
-    });
-}
+        return article;
+    }
 
-// Setup smooth scrolling for navigation links
-function setupSmoothScrolling() {
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', function (e) {
-            e.preventDefault();
-            const target = document.querySelector(this.getAttribute('href'));
-            if (target) {
-                            const headerHeight = document.querySelector('.header').offsetHeight;
-            const targetPosition = target.offsetTop - headerHeight - 20;
-            window.scrollTo({
-                top: targetPosition,
-                behavior: 'smooth'
+    setupFilters() {
+        // Clear existing options
+        this.yearFilter.innerHTML = '<option value="">All Years</option>';
+        this.locationFilter.innerHTML = '<option value="">All Locations</option>';
+        
+        // Populate year filter from years array
+        const allYears = [];
+        galleries.forEach(gallery => {
+            if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
+                gallery.years.forEach(year => {
+                    allYears.push(parseInt(year));
                 });
+            } else {
+                const fallbackYear = new Date(gallery.createdAt).getFullYear();
+                allYears.push(fallbackYear);
             }
         });
-    });
-}
+        
+        // Remove duplicates and sort in descending order
+        const years = [...new Set(allYears)].sort((a, b) => b - a);
+        
+        console.log('Available years for filter:', years);
+        years.forEach(year => {
+            const option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            this.yearFilter.appendChild(option);
+        });
+        
+        // Populate location filter with continents
+        const locations = [...new Set(galleries.map(gallery => gallery.continent || gallery.country || 'Unknown'))].sort();
+        console.log('Available locations for filter:', locations);
+        locations.forEach(location => {
+            const option = document.createElement('option');
+            option.value = location;
+            option.textContent = location;
+            this.locationFilter.appendChild(option);
+        });
+        
+        // Add event listeners
+        this.yearFilter.addEventListener('change', () => this.filterGalleries());
+        this.locationFilter.addEventListener('change', () => this.filterGalleries());
+    }
 
-// Update active navigation link based on scroll position
-function updateActiveNavLink() {
-    const sections = document.querySelectorAll('section[id]');
-    const navLinks = document.querySelectorAll('.nav-link');
-    
-    let current = '';
-    sections.forEach(section => {
-        const sectionTop = section.offsetTop;
-        const sectionHeight = section.clientHeight;
-        if (window.pageYOffset >= sectionTop - 200) {
-            current = section.getAttribute('id');
-        }
-    });
-    
-    navLinks.forEach(link => {
-        link.classList.remove('active');
-        if (link.getAttribute('href') === `#${current}`) {
-            link.classList.add('active');
-        }
-    });
-}
+    filterGalleries() {
+        const selectedYear = this.yearFilter.value;
+        const selectedLocation = this.locationFilter.value;
+        
+        this.currentFilteredGalleries = galleries.filter(gallery => {
+            // Check year from years array
+            let yearMatch = !selectedYear;
+            if (selectedYear) {
+                if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
+                    yearMatch = gallery.years.includes(selectedYear.toString());
+                } else {
+                    yearMatch = new Date(gallery.createdAt).getFullYear() == selectedYear;
+                }
+            }
+            
+            const locationMatch = !selectedLocation || (gallery.continent || gallery.country || 'Unknown') === selectedLocation;
+            return yearMatch && locationMatch;
+        });
+        
+        this.loadGalleries();
+    }
 
-// Header scroll effect
-function handleHeaderScroll() {
-    const header = document.querySelector('.header');
-    if (window.scrollY > 100) {
-        header.style.background = 'rgba(255, 255, 255, 0.98)';
-        header.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.15)';
-    } else {
-        header.style.background = 'rgba(255, 255, 255, 0.95)';
-        header.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.1)';
+    setupNavigation() {
+        this.navToggle.addEventListener('click', () => {
+            this.navMenu.classList.toggle('active');
+            this.navToggle.classList.toggle('active');
+        });
+        
+        // Close mobile menu when clicking on a link
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                this.navMenu.classList.remove('active');
+                this.navToggle.classList.remove('active');
+            });
+        });
+        
+        // Close mobile menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!this.navToggle.contains(e.target) && !this.navMenu.contains(e.target)) {
+                this.navMenu.classList.remove('active');
+                this.navToggle.classList.remove('active');
+            }
+        });
+    }
+
+    setupSmoothScrolling() {
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    const headerHeight = document.querySelector('.header').offsetHeight;
+                    const targetPosition = target.offsetTop - headerHeight - 20;
+                    window.scrollTo({
+                        top: targetPosition,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    }
+
+    updateActiveNavLink() {
+        const sections = document.querySelectorAll('section[id]');
+        const navLinks = document.querySelectorAll('.nav-link');
+        
+        let current = '';
+        sections.forEach(section => {
+            const sectionTop = section.offsetTop;
+            const sectionHeight = section.clientHeight;
+            if (window.pageYOffset >= sectionTop - 200) {
+                current = section.getAttribute('id');
+            }
+        });
+        
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('href') === `#${current}`) {
+                link.classList.add('active');
+            }
+        });
+    }
+
+    handleHeaderScroll() {
+        const header = document.querySelector('.header');
+        if (window.scrollY > 100) {
+            header.style.background = 'rgba(255, 255, 255, 0.98)';
+            header.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.15)';
+        } else {
+            header.style.background = 'rgba(255, 255, 255, 0.95)';
+            header.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.1)';
+        }
+    }
+
+    initMap() {
+        if (!this.galleryMap) {
+            this.galleryMap = new GalleryMap({
+                batchSize: 2,
+                batchDelay: 150,
+                maxRetries: 2,
+                retryDelay: 800
+            });
+        }
+        this.galleryMap.init();
     }
 }
 
-// Add scroll event listeners
-window.addEventListener('scroll', () => {
-    updateActiveNavLink();
-    handleHeaderScroll();
-});
-
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', init);
-
-// Add some CSS for the no-results message
-const style = document.createElement('style');
-style.textContent = `
-    .no-results {
-        text-align: center;
-        padding: 4rem 2rem;
-        color: #7f8c8d;
-        font-size: 1.1rem;
-    }
-`;
-document.head.appendChild(style); 
-
-document.addEventListener('dragstart', function(e) {
-    e.preventDefault();
-});
-
-// Map functionality
+// Map functionality class
 class GalleryMap {
     constructor(config = {}) {
         this.map = null;
         this.markers = [];
-        this.coordinateCache = new Map(); // 添加坐标缓存
+        this.coordinateCache = new Map();
         this.isInitialized = false;
         this.isLoadingMarkers = false;
         this.markerQueue = [];
         
-        // 筛选状态
+        // Filter state
         this.selectedYears = new Set();
         this.allYears = [];
         this.yearCounts = {};
         
-        // 可配置的批量处理参数
-        this.batchSize = config.batchSize || 3; // 每批处理的标记数量
-        this.batchDelay = config.batchDelay || 100; // 批次间的延迟时间(ms)
-        this.maxRetries = config.maxRetries || 3; // 最大重试次数
-        this.retryDelay = config.retryDelay || 1000; // 重试延迟时间(ms)
+        // Configurable batch processing parameters
+        this.batchSize = config.batchSize || 3;
+        this.batchDelay = config.batchDelay || 100;
+        this.maxRetries = config.maxRetries || 3;
+        this.retryDelay = config.retryDelay || 1000;
         
-        // 标记点大小配置
+        // Marker size configuration
         this.markerSizeConfig = {
-            minSize: 30,    // 最小尺寸 (zoom out时)
-            maxSize: 100,   // 最大尺寸 (zoom in时)
-            minZoom: 2,     // 最小缩放级别
-            maxZoom: 18     // 最大缩放级别
+            minSize: 30,
+            maxSize: 100,
+            minZoom: 2,
+            maxZoom: 18
         };
         
-        // 性能监控
+        // Performance monitoring
         this.performanceMetrics = {
             mapInitStart: 0,
             mapInitEnd: 0,
@@ -355,7 +314,6 @@ class GalleryMap {
             successfulMarkers: 0,
             failedMarkers: 0
         };
-        
     }
 
     async init() {
@@ -365,7 +323,6 @@ class GalleryMap {
                 return;
             }
 
-            // 检查是否有画廊数据
             if (!galleries || galleries.length === 0) {
                 console.log('No galleries available, retrying in 1 second...');
                 setTimeout(() => this.init(), 1000);
@@ -374,23 +331,18 @@ class GalleryMap {
 
             console.log('Initializing map with galleries:', galleries.length);
             
-            // 记录地图初始化开始时间
             this.performanceMetrics.mapInitStart = performance.now();
             this.performanceMetrics.totalMarkers = galleries.length;
             
-            // 立即初始化地图（这是关键优化）
             this.initMap();
             
-            // 记录地图初始化完成时间
             this.performanceMetrics.mapInitEnd = performance.now();
             const mapInitTime = this.performanceMetrics.mapInitEnd - this.performanceMetrics.mapInitStart;
             console.log(`Map initialized in ${mapInitTime.toFixed(2)}ms`);
             
-            // 隐藏加载状态，让用户看到地图
             this.hideLoading();
             this.isInitialized = true;
             
-            // 在后台开始加载gallery标记
             this.startBackgroundMarkerLoading();
             
         } catch (error) {
@@ -400,45 +352,41 @@ class GalleryMap {
     }
 
     initMap() {
-        // 初始化 Leaflet 地图
         this.map = L.map('map', {
             zoomControl: false,
             attributionControl: false,
-            minZoom: 3,       // 最小缩放级别（和 setView 对齐）
-            maxZoom: 16,      // 最大缩放级别
-            zoomSnap: 0.25,   // 最小粒度（0.25 = 四分之一等级）
-            zoomDelta: 0.25,  // 按按钮/键盘一次缩放 0.25 级
-            wheelPxPerZoomLevel: 60 // 滚轮滚动灵敏度
-        }).setView([20, 3], 2); // 默认中心 & 缩放级别
+            minZoom: 3,
+            maxZoom: 16,
+            zoomSnap: 0.25,
+            zoomDelta: 0.25,
+            wheelPxPerZoomLevel: 60,
+            worldCopyJump: true,
+            maxBounds: [
+                [-90, -180],
+                [90, 180]
+            ],
+            maxBoundsViscosity: 1.0
+        }).setView([20, 3], 2);
     
-        // 瓦片图层（OSM）
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors',
             subdomains: 'abc',
-            minZoom: 3,  // 同地图一致
+            minZoom: 3,
             maxZoom: 16
         }).addTo(this.map);
     
-        // 添加缩放事件监听器
         this.map.on('zoomend', () => {
             console.log('Zoom event triggered, current zoom level:', this.map.getZoom());
             this.updateMarkerSizes();
         });
     }
 
-    // 初始化筛选控件
     initFilterControls() {
-        // 收集所有年份和计数
         this.collectYearData();
-        
-        // 生成年份选项
         this.generateYearOptions();
-        
-        // 绑定事件
         this.bindFilterEvents();
     }
     
-    // 收集年份数据
     collectYearData() {
         this.allYears = [];
         this.yearCounts = {};
@@ -461,14 +409,12 @@ class GalleryMap {
             }
         });
         
-        // 排序年份
         this.allYears.sort((a, b) => b - a);
         
         console.log('Collected years:', this.allYears);
         console.log('Year counts:', this.yearCounts);
     }
     
-    // 生成年份选项
     generateYearOptions() {
         const container = document.getElementById('mapYearCheckboxes');
         if (!container) return;
@@ -488,9 +434,7 @@ class GalleryMap {
         });
     }
     
-    // 绑定筛选事件
     bindFilterEvents() {
-        // 年份复选框事件
         const checkboxes = document.querySelectorAll('#mapYearCheckboxes input[type="checkbox"]');
         checkboxes.forEach(checkbox => {
             checkbox.addEventListener('change', () => {
@@ -499,7 +443,6 @@ class GalleryMap {
         });
     }
     
-    // 处理年份筛选变化
     handleYearFilterChange() {
         this.selectedYears.clear();
         
@@ -512,9 +455,6 @@ class GalleryMap {
         this.updateMarkerVisibility();
     }
     
-
-    
-    // 更新标记点可见性
     updateMarkerVisibility() {
         this.markers.forEach(marker => {
             const gallery = marker.galleryData;
@@ -529,18 +469,14 @@ class GalleryMap {
             }
         });
         
-        // 重新调整地图视图以显示可见的标记点
         this.fitVisibleMarkers();
     }
     
-    // 判断是否应该显示标记点
     shouldShowMarker(gallery) {
-        // 如果没有选择任何年份，显示所有标记点
         if (this.selectedYears.size === 0) {
             return true;
         }
         
-        // 检查画廊的年份是否在选中的年份中
         if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
             return gallery.years.some(year => this.selectedYears.has(parseInt(year)));
         } else {
@@ -549,7 +485,6 @@ class GalleryMap {
         }
     }
     
-    // 调整地图视图以显示可见的标记点
     fitVisibleMarkers() {
         const visibleMarkers = this.markers.filter(marker => {
             const gallery = marker.galleryData;
@@ -563,51 +498,28 @@ class GalleryMap {
         }
     }
 
-    addCustomAttribution() {
-        const attribution = L.control.attribution({
-            position: 'bottomleft'
-        });
-        attribution.addAttribution('© OpenStreetMap contributors');
-        attribution.addAttribution('© CartoDB');
-        attribution.addTo(this.map);
-    }
-
-    // 根据当前缩放级别计算标记点大小
     calculateMarkerSize() {
         const currentZoom = this.map.getZoom();
         const { minSize, maxSize, minZoom, maxZoom } = this.markerSizeConfig;
         
-        // 计算缩放比例 (0-1)
         const zoomRatio = Math.max(0, Math.min(1, (currentZoom - minZoom) / (maxZoom - minZoom)));
-        
-        // 使用缓动函数让大小变化更平滑
         const easeRatio = this.easeInOutQuad(zoomRatio);
-        
-        // 计算当前大小
         const currentSize = minSize + (maxSize - minSize) * easeRatio;
-        
-        console.log(`Marker size calculation: zoom=${currentZoom}, ratio=${zoomRatio.toFixed(2)}, size=${Math.round(currentSize)}px`);
         
         return Math.round(currentSize);
     }
     
-    // 缓动函数，让大小变化更平滑
     easeInOutQuad(t) {
         return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
     }
     
-    // 更新所有标记点的大小
     updateMarkerSizes() {
         const newSize = this.calculateMarkerSize();
-        console.log(`Updating marker sizes to ${newSize}px at zoom level ${this.map.getZoom()}`);
-        console.log(`Total markers to update: ${this.markers.length}`);
         
         this.markers.forEach((marker, index) => {
-            // 获取标记点的坐标
             const markerLatLng = marker.getLatLng();
             console.log(`Updating marker ${index}: lat=${markerLatLng.lat}, lng=${markerLatLng.lng}`);
             
-            // 根据坐标找到对应的画廊数据
             const gallery = galleries.find(g => {
                 if (g.latitude && g.longitude) {
                     return Math.abs(g.latitude - markerLatLng.lat) < 0.001 && 
@@ -623,11 +535,9 @@ class GalleryMap {
             
             console.log(`Found gallery: ${gallery.name}`);
             
-            // 计算徽章大小（随标记点大小变化）
             const badgeSize = Math.max(16, Math.round(newSize * 0.3));
             const badgeFontSize = Math.max(8, Math.round(badgeSize * 0.4));
             
-            // 创建新的图标
             const newIcon = L.divIcon({
                 className: 'gallery-map-marker',
                 html: `
@@ -646,35 +556,27 @@ class GalleryMap {
                 iconAnchor: [newSize / 2, newSize / 2]
             });
             
-            // 更新标记点图标
             marker.setIcon(newIcon);
             console.log(`Marker ${index} updated to size ${newSize}px`);
         });
     }
 
-    // 在后台开始加载gallery标记
     startBackgroundMarkerLoading() {
         if (this.isLoadingMarkers) return;
         
         this.isLoadingMarkers = true;
         this.markerQueue = [...galleries];
         
-        // 记录标记加载开始时间
         this.performanceMetrics.markersLoadStart = performance.now();
         
-        // 显示加载进度指示器
         this.showMarkerLoadingProgress();
-        
-        // 开始批量处理
         this.processMarkerBatch();
         
-        // 初始化完成后更新一次标记点大小
         setTimeout(() => {
             this.updateMarkerSizes();
         }, 100);
     }
 
-    // 显示标记加载进度
     showMarkerLoadingProgress() {
         const loadingOverlay = document.getElementById('loadingOverlay');
         if (loadingOverlay) {
@@ -689,14 +591,12 @@ class GalleryMap {
         }
     }
 
-    // 更新标记加载进度
     updateMarkerProgress(loaded, total) {
         const progressElement = document.getElementById('markerProgress');
         if (progressElement) {
             progressElement.textContent = loaded;
         }
         
-        // 当所有标记加载完成时，隐藏加载指示器
         if (loaded >= total) {
             setTimeout(() => {
                 this.hideLoading();
@@ -704,12 +604,10 @@ class GalleryMap {
         }
     }
 
-    // 批量处理标记
     async processMarkerBatch() {
         if (this.markerQueue.length === 0) {
             this.isLoadingMarkers = false;
             
-            // 记录标记加载完成时间
             this.performanceMetrics.markersLoadEnd = performance.now();
             const markersLoadTime = this.performanceMetrics.markersLoadEnd - this.performanceMetrics.markersLoadStart;
             
@@ -722,20 +620,15 @@ class GalleryMap {
                 - Failed: ${this.performanceMetrics.failedMarkers}
                 - Success rate: ${((this.performanceMetrics.successfulMarkers / this.performanceMetrics.totalMarkers) * 100).toFixed(1)}%`);
             
-            // 所有标记加载完成后，调整地图视图
             this.fitAllMarkers();
-            
-            // 初始化筛选控件
             this.initFilterControls();
             
             return;
         }
 
-        // 取出一批标记
         const batch = this.markerQueue.splice(0, this.batchSize);
         console.log(`Processing batch of ${batch.length} markers, ${this.markerQueue.length} remaining`);
 
-        // 并行处理这一批标记
         const promises = batch.map(async (gallery) => {
             try {
                 const coordinates = await this.getCoordinates(gallery.name, gallery.country);
@@ -743,7 +636,7 @@ class GalleryMap {
                     this.addMarker(gallery, coordinates);
                     console.log(`Added marker for ${gallery.name} at ${coordinates}`);
                     this.performanceMetrics.successfulMarkers++;
-                    return true; // 成功添加标记
+                    return true;
                 } else {
                     console.warn(`Could not find coordinates for ${gallery.name}`);
                     this.performanceMetrics.failedMarkers++;
@@ -756,43 +649,36 @@ class GalleryMap {
             }
         });
 
-        // 等待当前批次完成
         const results = await Promise.all(promises);
         const successfulMarkers = results.filter(result => result === true).length;
         
-        // 更新进度
         const totalMarkers = galleries.length;
         const loadedMarkers = totalMarkers - this.markerQueue.length;
         this.updateMarkerProgress(loadedMarkers, totalMarkers);
 
-        // 延迟处理下一批，避免阻塞UI
         setTimeout(() => {
             this.processMarkerBatch();
         }, this.batchDelay);
     }
 
     getCoordinates(location, country) {
-        // 直接查找 gallery 数据里的经纬度
         const gallery = galleries.find(g => g.name === location && g.country === country);
         if (gallery && gallery.latitude && gallery.longitude) {
             return [gallery.latitude, gallery.longitude];
         }
     
         console.warn(`No coordinates found for ${location}, ${country}`);
-            return null;
+        return null;
     }
 
     addMarker(gallery, coordinates) {
-        // 计算当前缩放级别下的标记点大小
         const currentSize = this.calculateMarkerSize();
         const iconSize = [currentSize, currentSize];
         const iconAnchor = [currentSize / 2, currentSize / 2];
         
-        // 计算徽章大小（随标记点大小变化）
         const badgeSize = Math.max(20, Math.round(currentSize * 0.3));
         const badgeFontSize = Math.max(8, Math.round(badgeSize * 0.4));
         
-        // Create custom icon for the marker with better styling
         const icon = L.divIcon({
             className: 'gallery-map-marker',
             html: `
@@ -811,10 +697,8 @@ class GalleryMap {
             iconAnchor: iconAnchor
         });
         
-        // Create popup content
         const popupContent = this.createPopupContent(gallery);
         
-        // Add marker to map
         const marker = L.marker(coordinates, { icon: icon })
             .addTo(this.map)
             .bindPopup(popupContent, {
@@ -823,19 +707,14 @@ class GalleryMap {
                 closeButton: true
             });
         
-        // 将画廊数据附加到标记点对象上
         marker.galleryData = gallery;
-        
-        // Store marker reference
         this.markers.push(marker);
         
-        // 修复标记点点击事件
         marker.on('click', () => {
             const galleryId = gallery.galleryId || gallery.id;
             this.openGallery(galleryId);
         });
         
-        // Add hover effects
         marker.on('mouseover', () => {
             marker.getElement().classList.add('marker-hover');
         });
@@ -861,7 +740,7 @@ class GalleryMap {
                         <p class="location"><i class="fas fa-map-marker-alt"></i> ${gallery.continent} > ${gallery.country}</p>
                         <p class="photos"><i class="fas fa-images"></i> ${gallery.photoCount || 0} photos</p>
                     </div>
-                <button onclick="galleryMap.openGallery('${gallery.galleryId || gallery.id}')" 
+                <button onclick="app.galleryMap.openGallery('${gallery.galleryId || gallery.id}')" 
                             class="popup-button">
                         <i class="fas fa-external-link-alt"></i>
                     View Gallery
@@ -872,7 +751,6 @@ class GalleryMap {
     }
 
     openGallery(galleryId) {
-        // Navigate to gallery page
         window.location.href = `gallery.html?gallery=${galleryId}`;
     }
 
@@ -891,20 +769,153 @@ class GalleryMap {
     }
 }
 
-// Initialize map when galleries are loaded
-let galleryMap;
-function initMap() {
-    if (!galleryMap) {
-        // 使用优化的配置参数
-        galleryMap = new GalleryMap({
-            batchSize: 2,        // 每批处理2个标记，减少API压力
-            batchDelay: 150,     // 批次间延迟150ms，平衡性能和用户体验
-            maxRetries: 2,       // 最大重试2次
-            retryDelay: 800      // 重试延迟800ms
+// Add CSS for the no-results message
+const style = document.createElement('style');
+style.textContent = `
+    .no-results {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: #7f8c8d;
+        font-size: 1.1rem;
+    }
+`;
+document.head.appendChild(style);
+
+// Initialize application when DOM is loaded
+let app;
+document.addEventListener('DOMContentLoaded', () => {
+    app = new PhotoGalleryApp();
+});
+
+// Copy WeChat ID function
+function copyWechat() {
+    const wechatId = 'Magnetrician';
+    
+    // Create a temporary textarea element
+    const textarea = document.createElement('textarea');
+    textarea.value = wechatId;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    
+    // Select and copy the text
+    textarea.select();
+    textarea.setSelectionRange(0, 99999); // For mobile devices
+    
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            showCopySuccess();
+        } else {
+            // Fallback for modern browsers
+            navigator.clipboard.writeText(wechatId).then(() => {
+                showCopySuccess();
+            }).catch(() => {
+                showCopyError();
+            });
+        }
+    } catch (err) {
+        // Fallback for modern browsers
+        navigator.clipboard.writeText(wechatId).then(() => {
+            showCopySuccess();
+        }).catch(() => {
+            showCopyError();
         });
     }
-    galleryMap.init();
+    
+    // Clean up
+    document.body.removeChild(textarea);
 }
 
-// Make galleryMap globally accessible for popup buttons
-window.galleryMap = galleryMap;
+function showCopySuccess() {
+    // Create success message
+    const message = document.createElement('div');
+    message.className = 'copy-message copy-success';
+    message.innerHTML = '<i class="fas fa-check"></i> Wechat ID copied';
+    message.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #27ae60;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(message);
+    
+    // Remove message after 3 seconds
+    setTimeout(() => {
+        message.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => {
+            if (message.parentNode) {
+                document.body.removeChild(message);
+            }
+        }, 300);
+    }, 3000);
+}
+
+function showCopyError() {
+    // Create error message
+    const message = document.createElement('div');
+    message.className = 'copy-message copy-error';
+    message.innerHTML = '<i class="fas fa-times"></i> 复制失败，请手动复制：Magnetrician';
+    message.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #e74c3c;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(message);
+    
+    // Remove message after 5 seconds
+    setTimeout(() => {
+        message.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => {
+            if (message.parentNode) {
+                document.body.removeChild(message);
+            }
+        }, 300);
+    }, 5000);
+}
+
+// Add CSS animations for copy messages
+const copyMessageStyle = document.createElement('style');
+copyMessageStyle.textContent = `
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOut {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+    
+
+`;
+document.head.appendChild(copyMessageStyle);

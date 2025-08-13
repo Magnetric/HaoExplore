@@ -1,4 +1,13 @@
+# AWS SDK for Python
 boto3==1.34.0
 botocore==1.34.0
+
+# Image processing
 Pillow==10.2.0
+
+# HTTP client (if needed for future features)
+requests==2.32.4
+
+# Additional utilities that might be needed
+python-dateutil==2.8.2
 
