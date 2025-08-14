@@ -1,4 +1,4 @@
-# Photography Portfolio Website
+# Light&Lens Website
 
 A modern, responsive photography website to showcase your photos organized by year and location.
 

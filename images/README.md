@@ -14,5 +14,5 @@ This image should be a photograph of a photographer from behind, standing in a m
 **Format:** JPG or WebP
 **File size:** Optimize for web (under 500KB)
 
-This image will be used in the Contact section of the photography portfolio website.
+This image will be used in the Contact section of the Light&Lens website.
 

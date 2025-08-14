@@ -338,7 +338,6 @@ class AdminPanel {
                         </div>
                         <div style="color: rgba(255,255,255,0.8); font-size: 0.85rem; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">
                             Photos: ${gallery.photoCount || 0} | Created: ${new Date(gallery.createdAt).toLocaleDateString()}
-                            ${gallery.latitude && gallery.longitude ? ' | 📍 Has location' : ' | ❌ No location'}
                         </div>
                     </div>
                 </div>
@@ -436,8 +435,6 @@ class AdminPanel {
     }
     
     reorderGalleries(draggedId, targetId) {
-        console.log('Before reorder:', this.currentFilteredGalleries.map(g => ({name: g.name, sortOrder: g.sortOrder})));
-        
         const draggedIndex = this.currentFilteredGalleries.findIndex(g => g.galleryId === draggedId);
         const targetIndex = this.currentFilteredGalleries.findIndex(g => g.galleryId === targetId);
         
@@ -452,13 +449,8 @@ class AdminPanel {
         // Update sort order for all galleries
         this.updateSortOrders();
         
-        // Refresh the display
-        this.updateGalleriesManageList();
-        
-        // Show save button
-        this.showSaveOrderButton();
-        
-        console.log('After reorder:', this.currentFilteredGalleries.map(g => ({name: g.name, sortOrder: g.sortOrder})));
+        // Auto-save the new order
+        this.autoSaveGalleryOrder();
     }
     
     updateSortOrders() {
@@ -472,29 +464,10 @@ class AdminPanel {
         })));
     }
     
-    showSaveOrderButton() {
-        // Remove existing save button if any
-        const existingBtn = document.querySelector('.save-order-btn');
-        if (existingBtn) existingBtn.remove();
-        
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'save-order-btn';
-        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save New Order';
-        saveBtn.onclick = () => this.saveGalleryOrder();
-        
-        const sortInfo = document.querySelector('.sort-info');
-        if (sortInfo) {
-            sortInfo.appendChild(saveBtn);
-        }
-    }
-    
-    async saveGalleryOrder() {
+    async autoSaveGalleryOrder() {
         try {
-            const saveBtn = document.querySelector('.save-order-btn');
-            if (saveBtn) {
-                saveBtn.disabled = true;
-                saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-            }
+            // Show saving message
+            this.showMessage('💾 Auto-saving gallery order...', 'info');
             
             // Prepare galleries with updated sort orders
             const galleriesToUpdate = this.currentFilteredGalleries.map(gallery => ({
@@ -502,16 +475,11 @@ class AdminPanel {
                 sortOrder: gallery.sortOrder
             }));
             
-            console.log('Sending to API:', galleriesToUpdate);
+            // Call API to update sort orders
             const result = await this.api.updateGallerySortOrder(galleriesToUpdate);
-            console.log('API response:', result);
             
             if (result.success) {
-                this.showMessage('✅ Gallery order saved successfully!', 'success');
-                
-                // Remove save button
-                const saveBtn = document.querySelector('.save-order-btn');
-                if (saveBtn) saveBtn.remove();
+                this.showMessage('✅ Gallery order auto-saved successfully!', 'success');
                 
                 // Update the main galleries array
                 this.galleries.forEach(gallery => {
@@ -521,21 +489,25 @@ class AdminPanel {
                     }
                 });
                 
+                // Refresh the display to show new order
+                this.updateGalleriesManageList();
+                
             } else {
-                throw new Error(result.error || 'Failed to save gallery order');
+                throw new Error(result.error || 'Failed to auto-save gallery order');
             }
             
         } catch (error) {
-            console.error('Error saving gallery order:', error);
-            this.showMessage('❌ Failed to save gallery order: ' + error.message, 'error');
+            console.error('Error auto-saving gallery order:', error);
+            this.showMessage('❌ Failed to auto-save gallery order: ' + error.message, 'error');
             
-            // Re-enable save button
-            const saveBtn = document.querySelector('.save-order-btn');
-            if (saveBtn) {
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = '<i class="fas fa-save"></i> Save New Order';
-            }
+            // Revert the order change on error
+            this.revertOrderChange();
         }
+    }
+    
+    revertOrderChange() {
+        // Reload galleries from server to revert any local changes
+        this.loadGalleries();
     }
 
     showTab(tabName) {

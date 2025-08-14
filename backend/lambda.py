@@ -96,6 +96,9 @@ def lambda_handler(event, context):
         elif action_param == 'update_sort_order':
             logger.info("Routing to update_gallery_sort_order()")
             return update_gallery_sort_order(body)
+        elif action_param == 'update_photo_sort_order':
+            logger.info("Routing to update_photo_sort_order()")
+            return update_photo_sort_order(body)
         else:
             logger.info("Routing to create_gallery()")
             return create_gallery(body)
@@ -348,7 +351,29 @@ def get_gallery(gallery_id):
             KeyConditionExpression=Key('galleryId').eq(str(gallery_id)),
             ScanIndexForward=True
         )
-        gallery['photos'] = photos_resp.get('Items', [])
+        photos = photos_resp.get('Items', [])
+        
+        # Sort photos by sortOrder if available, otherwise by photoId
+        photos.sort(key=lambda x: (x.get('sortOrder', float('inf')), x.get('photoId', '')))
+        
+        # Ensure all photos have sortOrder (for backward compatibility)
+        for i, photo in enumerate(photos):
+            if 'sortOrder' not in photo:
+                photo['sortOrder'] = i + 1
+                # Update the photo in DynamoDB with sortOrder
+                try:
+                    tbl_gallery_photos.update_item(
+                        Key={'galleryId': str(gallery_id), 'photoId': photo['photoId']},
+                        UpdateExpression='SET sortOrder = :sort_order',
+                        ExpressionAttributeValues={
+                            ':sort_order': i + 1
+                        }
+                    )
+                    logger.info(f"Added sortOrder {i + 1} to photo {photo['photoId']}")
+                except Exception as e:
+                    logger.warning(f"Failed to update sortOrder for photo {photo['photoId']}: {e}")
+        
+        gallery['photos'] = photos
 
         # Ensure compatibility fields
         gallery['id'] = gallery.get('galleryId', str(gallery_id))
@@ -679,9 +704,16 @@ def upload_photos(gallery_id, upload_data):
         if total_size > 100 * 1024 * 1024:  # 100MB total
             return create_response(413, {'error': 'Total upload size too large (max 100MB)'})
         
+        # Get current photo count to set correct sort order
+        from boto3.dynamodb.conditions import Key
+        existing_photos = tbl_gallery_photos.query(
+            KeyConditionExpression=Key('galleryId').eq(str(gallery_id))
+        )
+        current_photo_count = len(existing_photos.get('Items', []))
+        
         uploaded_photos = []
         
-        for photo_data in photos_data:
+        for photo_index, photo_data in enumerate(photos_data):
             filename = photo_data.get('filename')
             image_data = photo_data.get('image')  # Base64 encoded
             content_type = photo_data.get('contentType', 'image/jpeg')
@@ -744,7 +776,8 @@ def upload_photos(gallery_id, upload_data):
                 'thumbnail': thumb_url or f'https://{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/{s3_key}',
                 'uploadedAt': datetime.utcnow().isoformat() + 'Z',   
                 'format': file_extension.upper(),
-                'lastModified': datetime.utcnow().isoformat() + 'Z'
+                'lastModified': datetime.utcnow().isoformat() + 'Z',
+                'sortOrder': current_photo_count + photo_index + 1  # Add sort order based on existing photos + upload order
             }
                 
             # 图片尺寸 & 文件大小
@@ -1658,5 +1691,105 @@ def update_gallery_sort_order(request_data):
         return create_response(500, {
             'success': False,
             'error': 'Failed to update gallery sort order',
+            'details': str(e)
+        })
+
+def update_photo_sort_order(request_data):
+    """
+    Update the sort order (sequence) for photos within a gallery
+    """
+    try:
+        logger.info(f"Updating photo sort order with data: {request_data}")
+        
+        # Validate request data
+        if 'galleryId' not in request_data:
+            return create_response(400, {'error': 'Missing galleryId in request'})
+        if 'photos' not in request_data:
+            return create_response(400, {'error': 'Missing photos array in request'})
+        
+        gallery_id = request_data['galleryId']
+        photos_data = request_data['photos']
+        
+        if not isinstance(photos_data, list) or len(photos_data) == 0:
+            return create_response(400, {'error': 'Photos must be a non-empty array'})
+        
+        # Validate each photo entry
+        for photo in photos_data:
+            if 'photoId' not in photo:
+                return create_response(400, {'error': 'Each photo must have photoId'})
+            if 'sortOrder' not in photo:
+                return create_response(400, {'error': 'Each photo must have sortOrder'})
+            if not isinstance(photo['sortOrder'], (int, float)) or photo['sortOrder'] < 1:
+                return create_response(400, {'error': 'sortOrder must be a positive number'})
+        
+        # Update each photo's sort order in DynamoDB
+        updated_count = 0
+        errors = []
+        
+        for photo in photos_data:
+            try:
+                photo_id = photo['photoId']
+                sort_order = int(photo['sortOrder'])
+                
+                # Update the photo with new sort order
+                response = tbl_gallery_photos.update_item(
+                    Key={'galleryId': gallery_id, 'photoId': photo_id},
+                    UpdateExpression='SET sortOrder = :sort_order, updatedAt = :updated_at',
+                    ExpressionAttributeValues={
+                        ':sort_order': sort_order,
+                        ':updated_at': datetime.utcnow().isoformat() + 'Z'
+                    },
+                    ConditionExpression='attribute_exists(galleryId) AND attribute_exists(photoId)',
+                    ReturnValues='UPDATED_NEW'
+                )
+                
+                logger.info(f"Successfully updated sort order for photo {photo_id} to {sort_order}")
+                updated_count += 1
+                
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                    error_msg = f"Photo {photo['photoId']} not found in gallery {gallery_id}"
+                    logger.warning(error_msg)
+                    errors.append(error_msg)
+                else:
+                    error_msg = f"Error updating photo {photo['photoId']}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+            except Exception as e:
+                error_msg = f"Unexpected error updating photo {photo['photoId']}: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+        
+        # Prepare response
+        if errors:
+            if updated_count == 0:
+                # All updates failed
+                return create_response(500, {
+                    'success': False,
+                    'error': 'All photo sort order updates failed',
+                    'details': errors
+                })
+            else:
+                # Some updates succeeded, some failed
+                return create_response(200, {
+                    'success': True,
+                    'message': f'Partially updated photo sort orders: {updated_count} successful, {len(errors)} failed',
+                    'updated_count': updated_count,
+                    'errors': errors,
+                    'partial_success': True
+                })
+        else:
+            # All updates succeeded
+            return create_response(200, {
+                'success': True,
+                'message': f'Successfully updated sort order for {updated_count} photos',
+                'updated_count': updated_count
+            })
+            
+    except Exception as e:
+        logger.error(f"Error in update_photo_sort_order: {str(e)}")
+        return create_response(500, {
+            'success': False,
+            'error': 'Failed to update photo sort order',
             'details': str(e)
         })

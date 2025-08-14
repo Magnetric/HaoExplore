@@ -104,7 +104,7 @@ class GalleryPageApp {
             const gallery = await this.getGalleryData();
             
             // Update page title
-            document.title = `${gallery.name} - Photography Portfolio`;
+            document.title = `${gallery.name} - Light&Lens`;
             
             // Update gallery header
             this.galleryTitle.textContent = gallery.name;
@@ -139,7 +139,20 @@ class GalleryPageApp {
             return;
         }
         
-        photos.forEach((photo, index) => {
+        // Sort photos by sortOrder if available, otherwise by index
+        const sortedPhotos = [...photos].sort((a, b) => {
+            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
+            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
+            return orderA - orderB;
+        });
+        
+        console.log('Photos sorted by sortOrder:', sortedPhotos.map(p => ({
+            id: p.photoId,
+            name: p.name || p.title,
+            sortOrder: p.sortOrder
+        })));
+        
+        sortedPhotos.forEach((photo, index) => {
             const photoElement = this.createPhotoElement(photo, index);
             this.photosGrid.appendChild(photoElement);
         });
@@ -261,13 +274,20 @@ class GalleryPageApp {
     openFullscreenViewer(index) {
         console.log('Opening fullscreen viewer for index:', index);
         
-        if (index < 0 || index >= this.currentGalleryPhotos.length) {
+        // Get sorted photos for consistent ordering
+        const sortedPhotos = [...this.currentGalleryPhotos].sort((a, b) => {
+            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
+            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
+            return orderA - orderB;
+        });
+        
+        if (index < 0 || index >= sortedPhotos.length) {
             console.error('Invalid photo index:', index);
             return;
         }
         
         this.currentPhotoIndexValue = index;
-        const photo = this.currentGalleryPhotos[index];
+        const photo = sortedPhotos[index];
         
         if (!this.fullscreenImage) {
             console.error('Fullscreen image element not found');
@@ -278,7 +298,7 @@ class GalleryPageApp {
         this.fullscreenImage.alt = photo.title || photo.name || 'Photo';
         
         this.currentPhotoIndex.textContent = index + 1;
-        this.totalPhotos.textContent = this.currentGalleryPhotos.length;
+        this.totalPhotos.textContent = sortedPhotos.length;
         
         const fullscreenRating = document.getElementById('fullscreenStarRating');
         if (fullscreenRating) {
@@ -295,12 +315,22 @@ class GalleryPageApp {
     }
 
     showPreviousPhoto() {
-        const newIndex = this.currentPhotoIndexValue > 0 ? this.currentPhotoIndexValue - 1 : this.currentGalleryPhotos.length - 1;
+        const sortedPhotos = [...this.currentGalleryPhotos].sort((a, b) => {
+            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
+            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
+            return orderA - orderB;
+        });
+        const newIndex = this.currentPhotoIndexValue > 0 ? this.currentPhotoIndexValue - 1 : sortedPhotos.length - 1;
         this.openFullscreenViewer(newIndex);
     }
 
     showNextPhoto() {
-        const newIndex = this.currentPhotoIndexValue < this.currentGalleryPhotos.length - 1 ? this.currentPhotoIndexValue + 1 : 0;
+        const sortedPhotos = [...this.currentGalleryPhotos].sort((a, b) => {
+            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
+            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
+            return orderA - orderB;
+        });
+        const newIndex = this.currentPhotoIndexValue < sortedPhotos.length - 1 ? this.currentPhotoIndexValue + 1 : 0;
         this.openFullscreenViewer(newIndex);
     }
 

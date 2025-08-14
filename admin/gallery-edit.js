@@ -340,7 +340,17 @@ function updatePhotosGrid() {
     }
 
     photosGrid.innerHTML = photos.map((photo, index) => `
-        <div class="photo-item-enhanced" data-photo-index="${index}">
+        <div class="photo-item-enhanced" data-photo-index="${index}" data-photo-id="${photo.photoId || photo.id || index}" data-sort-order="${photo.sortOrder || index + 1}">
+            <!-- Drag Handle - positioned at top left -->
+            <div class="drag-handle" draggable="true" onmousedown="event.stopPropagation();" onmouseover="this.style.background='rgba(255,255,255,1)'" onmouseout="this.style.background='rgba(255,255,255,0.9)'">
+                <i class="fas fa-grip-vertical" style="color: #6c757d; font-size: 12px;"></i>
+            </div>
+            
+            <!-- Sort Order Indicator - positioned at top right -->
+            <div class="sort-order-indicator">
+                #${photo.sortOrder || index + 1}
+            </div>
+            
             <div class="photo-image-container">
                 <img src="${photo.thumbnail}" alt="${photo.title || 'Photo'}" loading="lazy" class="photo-img">
                 <div class="photo-overlay"></div>
@@ -415,6 +425,9 @@ function updatePhotosGrid() {
             });
         }
     });
+    
+    // Setup drag and drop functionality for photos
+    setupPhotoDragAndDrop();
 }
 
 // ==================== PHOTO MANAGEMENT ====================
@@ -1157,4 +1170,181 @@ window.addYear = addYear;
 window.removeYear = removeYear;
 window.saveGalleryChanges = saveGalleryChanges;
 window.goBackToAdmin = goBackToAdmin;
+
+// ==================== PHOTO DRAG AND DROP FUNCTIONALITY ====================
+
+function setupPhotoDragAndDrop() {
+    const photoItems = document.querySelectorAll('.photo-item-enhanced');
+    
+    if (!photoItems.length) return;
+    
+    // Setup drag events for each photo item
+    photoItems.forEach(item => {
+        const handle = item.querySelector('.drag-handle');
+        if (handle) {
+            handle.addEventListener('dragstart', (e) => handlePhotoDragStart(e, item));
+            handle.addEventListener('dragend', (e) => handlePhotoDragEnd(e, item));
+        }
+    });
+    
+    // Setup drop zones
+    photoItems.forEach(item => {
+        item.addEventListener('dragover', (e) => handlePhotoDragOver(e, item));
+        item.addEventListener('drop', (e) => handlePhotoDrop(e, item));
+        item.addEventListener('dragenter', (e) => handlePhotoDragEnter(e, item));
+        item.addEventListener('dragleave', (e) => handlePhotoDragLeave(e, item));
+    });
+    
+    console.log('Photo drag and drop functionality initialized');
+}
+
+function handlePhotoDragStart(e, item) {
+    e.stopPropagation();
+    item.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', item.outerHTML);
+    e.dataTransfer.setData('text/plain', item.dataset.photoId);
+    
+    console.log('Photo drag started for:', item.dataset.photoId);
+}
+
+function handlePhotoDragEnd(e, item) {
+    e.stopPropagation();
+    item.classList.remove('dragging');
+    console.log('Photo drag ended for:', item.dataset.photoId);
+}
+
+function handlePhotoDragOver(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function handlePhotoDragEnter(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!item.classList.contains('dragging')) {
+        item.classList.add('drag-over');
+    }
+}
+
+function handlePhotoDragLeave(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    item.classList.remove('drag-over');
+}
+
+function handlePhotoDrop(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const draggedItem = document.querySelector('.dragging');
+    if (!draggedItem) return;
+    
+    item.classList.remove('drag-over');
+    
+    const draggedId = draggedItem.dataset.photoId;
+    const targetId = item.dataset.photoId;
+    
+    if (draggedId === targetId) return;
+    
+    console.log(`Dropping photo ${draggedId} onto ${targetId}`);
+    
+    // Reorder photos
+    reorderPhotos(draggedId, targetId);
+}
+
+function reorderPhotos(draggedId, targetId) {
+    const draggedIndex = photos.findIndex(p => (p.photoId || p.id || p.toString()) === draggedId);
+    const targetIndex = photos.findIndex(p => (p.photoId || p.id || p.toString()) === targetId);
+    
+    if (draggedIndex === -1 || targetIndex === -1) return;
+    
+    // Remove dragged item from array
+    const [draggedPhoto] = photos.splice(draggedIndex, 1);
+    
+    // Insert at target position
+    photos.splice(targetIndex, 0, draggedPhoto);
+    
+    // Update sort order for all photos
+    updatePhotoSortOrders();
+    
+    // Auto-save the new order
+    autoSavePhotoOrder();
+}
+
+function updatePhotoSortOrders() {
+    photos.forEach((photo, index) => {
+        photo.sortOrder = index + 1;
+    });
+    
+    console.log('Updated photo sort orders:', photos.map(p => ({
+        id: p.photoId || p.id,
+        name: p.name || p.title,
+        sortOrder: p.sortOrder
+    })));
+}
+
+async function autoSavePhotoOrder() {
+    try {
+        // Show saving message
+        showMessage('💾 Auto-saving photo order...', 'info');
+        
+        // Prepare photos with updated sort orders
+        const photosToUpdate = photos.map(photo => ({
+            photoId: photo.photoId || photo.id,
+            sortOrder: photo.sortOrder
+        }));
+        
+        // Call API to update photo sort orders
+        const result = await updatePhotoSortOrder(photosToUpdate);
+        
+        if (result.success) {
+            showMessage('✅ Photo order auto-saved successfully!', 'success');
+            
+            // Refresh the display to show new order
+            updatePhotosGrid();
+            
+        } else {
+            throw new Error(result.error || 'Failed to auto-save photo order');
+        }
+        
+    } catch (error) {
+        console.error('Error auto-saving photo order:', error);
+        showMessage('❌ Failed to auto-save photo order: ' + error.message, 'error');
+        
+        // Revert the order change on error
+        revertPhotoOrderChange();
+    }
+}
+
+function revertPhotoOrderChange() {
+    // Reload photos from server to revert any local changes
+    loadGalleryPhotos();
+}
+
+async function updatePhotoSortOrder(photosData) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/galleries?action=update_photo_sort_order`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                galleryId: currentGallery.galleryId,
+                photos: photosData
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to update photo sort order');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error updating photo sort order:', error);
+        throw error;
+    }
+}
 
