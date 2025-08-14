@@ -1721,3 +1721,146 @@
         height: 150px;
     }
 }
+
+/* ==================== DRAG AND DROP STYLES ==================== */
+
+/* Gallery Grid with Drag and Drop */
+.gallery-grid {
+    position: relative;
+}
+
+.gallery-item {
+    cursor: grab;
+    transition: all 0.3s ease;
+    user-select: none;
+}
+
+.gallery-item:active {
+    cursor: grabbing;
+}
+
+.gallery-item.dragging {
+    opacity: 0.5;
+    transform: scale(1.05);
+    z-index: 1000;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.gallery-item.drag-over {
+    border: 2px dashed #3498db;
+    background: rgba(52, 152, 219, 0.1);
+}
+
+/* Drag Handle */
+.drag-handle {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    width: 24px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    z-index: 3;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.drag-handle:hover {
+    background: white;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+/* Sort Order Indicator */
+.sort-order-indicator {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    background: rgba(52, 152, 219, 0.9);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    z-index: 3;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* Drop Zone Styles */
+.drop-zone {
+    border: 2px dashed #e1e8ed;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    color: #6c757d;
+    background: #f8f9fa;
+    transition: all 0.3s ease;
+}
+
+.drop-zone.drag-over {
+    border-color: #3498db;
+    background: rgba(52, 152, 219, 0.1);
+    color: #3498db;
+}
+
+/* Save Order Button */
+.save-order-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.save-order-btn:hover {
+    background: #218838;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.save-order-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Sort Info Styles */
+.sort-info {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.sort-info h4 {
+    margin: 0 0 0.5rem 0;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sort-info p {
+    margin: 0;
+    color: #6c757d;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}

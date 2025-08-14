@@ -93,6 +93,9 @@ def lambda_handler(event, context):
         elif action_param == 'get_photo_rating':
             logger.info("Routing to get_photo_rating()")
             return get_photo_rating(query_params)
+        elif action_param == 'update_sort_order':
+            logger.info("Routing to update_gallery_sort_order()")
+            return update_gallery_sort_order(body)
         else:
             logger.info("Routing to create_gallery()")
             return create_gallery(body)
@@ -153,6 +156,20 @@ def create_gallery(gallery_data):
         gallery_id = str(uuid.uuid4())
         current_time = datetime.utcnow().isoformat() + 'Z'
         
+        # Get the next sort order for the new gallery
+        try:
+            # Scan for the highest current sort order
+            scan_response = tbl_galleries.scan(
+                ProjectionExpression='sortOrder',
+                FilterExpression='attribute_exists(sortOrder)'
+            )
+            existing_sort_orders = [item.get('sortOrder', 0) for item in scan_response.get('Items', [])]
+            next_sort_order = max(existing_sort_orders) + 1 if existing_sort_orders else 1
+            logger.info(f"Next sort order for new gallery: {next_sort_order}")
+        except Exception as e:
+            logger.warning(f"Error getting next sort order, defaulting to 1: {str(e)}")
+            next_sort_order = 1
+        
         # Create gallery record in DynamoDB (source of truth)
         gallery_item = {
             'galleryId': gallery_id,
@@ -163,6 +180,7 @@ def create_gallery(gallery_data):
             # Years are required; normalize to list and ensure they are strings
             'years': years,
             'photoCount': 0,
+            'sortOrder': next_sort_order,
             'createdAt': current_time,
             'updatedAt': current_time
         }
@@ -207,6 +225,7 @@ def create_gallery(gallery_data):
             'years': gallery_item['years'],
             'photos': [],
             'photoCount': 0,
+            'sortOrder': gallery_item['sortOrder'],
             'createdAt': current_time,
             'updatedAt': current_time
         }
@@ -235,6 +254,14 @@ def list_galleries():
     logger.info("Listing galleries from DynamoDB table")
     scan = tbl_galleries.scan()
     items = scan.get('Items', [])
+
+    # Sort galleries by sortOrder if available, otherwise by creation date
+    try:
+        items.sort(key=lambda x: (x.get('sortOrder', float('inf')), x.get('createdAt', '')))
+        logger.info(f"Sorted {len(items)} galleries by sortOrder")
+    except Exception as e:
+        logger.warning(f"Error sorting galleries by sortOrder, using creation date: {str(e)}")
+        items.sort(key=lambda x: x.get('createdAt', ''))
 
     return create_response(200, {
         'galleries': items,
@@ -1537,3 +1564,99 @@ def geocode_place(gallery_name, country=None):
 
     _geocode_cache[cache_key] = None
     return None
+
+def update_gallery_sort_order(request_data):
+    """
+    Update the sort order (sequence) for multiple galleries
+    """
+    try:
+        logger.info(f"Updating gallery sort order with data: {request_data}")
+        
+        # Validate request data
+        if 'galleries' not in request_data:
+            return create_response(400, {'error': 'Missing galleries array in request'})
+        
+        galleries_data = request_data['galleries']
+        if not isinstance(galleries_data, list) or len(galleries_data) == 0:
+            return create_response(400, {'error': 'Galleries must be a non-empty array'})
+        
+        # Validate each gallery entry
+        for gallery in galleries_data:
+            if 'galleryId' not in gallery:
+                return create_response(400, {'error': 'Each gallery must have galleryId'})
+            if 'sortOrder' not in gallery:
+                return create_response(400, {'error': 'Each gallery must have sortOrder'})
+            if not isinstance(gallery['sortOrder'], (int, float)) or gallery['sortOrder'] < 1:
+                return create_response(400, {'error': 'sortOrder must be a positive number'})
+        
+        # Update each gallery's sort order in DynamoDB
+        updated_count = 0
+        errors = []
+        
+        for gallery in galleries_data:
+            try:
+                gallery_id = gallery['galleryId']
+                sort_order = int(gallery['sortOrder'])
+                
+                # Update the gallery with new sort order
+                response = tbl_galleries.update_item(
+                    Key={'galleryId': gallery_id},
+                    UpdateExpression='SET sortOrder = :sort_order, updatedAt = :updated_at',
+                    ExpressionAttributeValues={
+                        ':sort_order': sort_order,
+                        ':updated_at': datetime.utcnow().isoformat() + 'Z'
+                    },
+                    ConditionExpression='attribute_exists(galleryId)',
+                    ReturnValues='UPDATED_NEW'
+                )
+                
+                logger.info(f"Successfully updated sort order for gallery {gallery_id} to {sort_order}")
+                updated_count += 1
+                
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                    error_msg = f"Gallery {gallery['galleryId']} not found"
+                    logger.warning(error_msg)
+                    errors.append(error_msg)
+                else:
+                    error_msg = f"Error updating gallery {gallery['galleryId']}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+            except Exception as e:
+                error_msg = f"Unexpected error updating gallery {gallery['galleryId']}: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+        
+        # Prepare response
+        if errors:
+            if updated_count == 0:
+                # All updates failed
+                return create_response(500, {
+                    'success': False,
+                    'error': 'All gallery sort order updates failed',
+                    'details': errors
+                })
+            else:
+                # Some updates succeeded, some failed
+                return create_response(200, {
+                    'success': True,
+                    'message': f'Partially updated gallery sort orders: {updated_count} successful, {len(errors)} failed',
+                    'updated_count': updated_count,
+                    'errors': errors,
+                    'partial_success': True
+                })
+        else:
+            # All updates succeeded
+            return create_response(200, {
+                'success': True,
+                'message': f'Successfully updated sort order for {updated_count} galleries',
+                'updated_count': updated_count
+            })
+            
+    except Exception as e:
+        logger.error(f"Error in update_gallery_sort_order: {str(e)}")
+        return create_response(500, {
+            'success': False,
+            'error': 'Failed to update gallery sort order',
+            'details': str(e)
+        })

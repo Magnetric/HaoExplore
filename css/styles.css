@@ -124,10 +124,9 @@ body {
 
 /* Hero Section */
 .hero {
-    /* Fallback background for better GitHub Pages compatibility */
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    background-image: url('../images/photo-6.webp');  /* 指向你的照片路径 */
-    background-size: cover;           /* 让图片铺满整个区域 */
+    /* 直接设置背景图片 */
+    background-image: url('../images/photo-6.webp');
+    background-size: 110%;           /* 初始放大，为动画做准备 */
     background-position: center;      /* 居中显示图片 */
     background-repeat: no-repeat;     /* 不重复平铺 */
     color: white;
@@ -136,12 +135,44 @@ body {
     min-height: 100vh;
     display: flex;
     align-items: center;
+    position: relative;
+    overflow: hidden;
+    animation: heroZoom 20s ease-in-out infinite; /* 应用动画 */
 }
 
+/* 渐变背景覆盖层，用于增强视觉效果 */
+.hero::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    z-index: 1;
+}
+
+
+
+/* 渐进渐远动画关键帧 */
+@keyframes heroZoom {
+    0% {
+        background-size: 110%;
+    }
+    50% {
+        background-size: 120%;
+    }
+    100% {
+        background-size: 110%;
+    }
+}
+
+/* Hero内容样式 */
 .hero-content {
+    position: relative;
+    z-index: 2;
     max-width: 800px;
     margin: 0 auto;
-    /* margin-top: 400px;*/
 }
 
 .hero-title {
@@ -652,6 +683,19 @@ button.social-link:hover i {
     background-position: center;
     background-attachment: fixed;
     z-index: 1;
+    animation: contactZoom 25s ease-in-out infinite;
+}
+
+@keyframes contactZoom {
+    0% {
+        transform: scale(1.05);
+    }
+    50% {
+        transform: scale(1.15);
+    }
+    100% {
+        transform: scale(1.05);
+    }
 }
 
 .contact-overlay {
@@ -932,6 +976,23 @@ button.social-link:hover i {
         min-height: 90vh;
     }
     
+    /* 移动端渐进渐远动画优化 */
+    .hero {
+        animation: heroZoomMobile 15s ease-in-out infinite;
+    }
+    
+    @keyframes heroZoomMobile {
+        0% {
+            background-size: 105%;
+        }
+        50% {
+            background-size: 115%;
+        }
+        100% {
+            background-size: 105%;
+        }
+    }
+    
     .hero-content {
         padding: 0 15px;
     }
@@ -1099,6 +1160,23 @@ button.social-link:hover i {
     
     .hero-subtitle {
         font-size: 1rem;
+    }
+    
+    /* 小屏幕渐进渐远动画优化 */
+    .hero {
+        animation: heroZoomSmall 12s ease-in-out infinite;
+    }
+    
+    @keyframes heroZoomSmall {
+        0% {
+            background-size: 102%;
+        }
+        50% {
+            background-size: 108%;
+        }
+        100% {
+            background-size: 102%;
+        }
     }
     
     .btn {
@@ -1791,6 +1869,19 @@ button.social-link:hover i {
     
     .contact-background {
         background-attachment: scroll;
+        animation: contactZoomMobile 20s ease-in-out infinite;
+    }
+    
+    @keyframes contactZoomMobile {
+        0% {
+            transform: scale(1.02);
+        }
+        50% {
+            transform: scale(1.08);
+        }
+        100% {
+            transform: scale(1.02);
+        }
     }
     
     .contact-content {
@@ -1881,6 +1972,22 @@ button.social-link:hover i {
         flex-direction: row;
         justify-content: center;
         gap: 0.75rem;
+    }
+    
+        .contact-background {
+        animation: contactZoomSmall 18s ease-in-out infinite;
+    }
+    
+    @keyframes contactZoomSmall {
+        0% {
+            transform: scale(1.01);
+        }
+        50% {
+            transform: scale(1.01);
+        }
+        100% {
+            transform: scale(1.01);
+        }
     }
 }
 

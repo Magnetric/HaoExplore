@@ -287,14 +287,18 @@ class AdminPanel {
             return;
         }
         
-        // Pre-process galleries to get thumbnail URLs
-        const processedGalleries = this.currentFilteredGalleries.map(gallery => {
+        // Pre-process galleries to get thumbnail URLs and add sort order
+        const processedGalleries = this.currentFilteredGalleries.map((gallery, index) => {
             const thumbnailUrl = this.getCoverPhotoThumbnail(gallery);
             return {
                 ...gallery,
-                thumbnailUrl: thumbnailUrl
+                thumbnailUrl: thumbnailUrl,
+                sortOrder: gallery.sortOrder || index + 1
             };
         });
+        
+        // Sort galleries by sort order
+        processedGalleries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
         
         // Create grid view for galleries - apply grid directly to container
         galleriesGrid.style.display = 'grid';
@@ -305,15 +309,25 @@ class AdminPanel {
         galleriesGrid.style.maxWidth = 'none';
         
         galleriesGrid.innerHTML = `
-            ${processedGalleries.map(gallery => `
-                <div class="gallery-item" data-gallery-id="${gallery.galleryId}" data-thumbnail="${gallery.thumbnailUrl || ''}" style="background: ${gallery.thumbnailUrl ? `url('${gallery.thumbnailUrl}')` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 12px; padding: 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid #e1e8ed; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; position: relative; min-height: 200px;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'" onclick="adminPanel.editGallery('${gallery.galleryId}')">
+            ${processedGalleries.map((gallery, index) => `
+                <div class="gallery-item" data-gallery-id="${gallery.galleryId}" data-sort-order="${gallery.sortOrder || index + 1}" data-thumbnail="${gallery.thumbnailUrl || ''}" style="background: ${gallery.thumbnailUrl ? `url('${gallery.thumbnailUrl}')` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 12px; padding: 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid #e1e8ed; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; position: relative; min-height: 200px;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'" onclick="adminPanel.editGallery('${gallery.galleryId}')">
                     <!-- Overlay for better text readability -->
                     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); border-radius: 12px;"></div>
+                    
+                    <!-- Drag Handle - positioned at top left -->
+                    <div class="drag-handle" draggable="true" onmousedown="event.stopPropagation();" onmouseover="this.style.background='rgba(255,255,255,1)'" onmouseout="this.style.background='rgba(255,255,255,0.9)'">
+                        <i class="fas fa-grip-vertical" style="color: #6c757d; font-size: 12px;"></i>
+                    </div>
                     
                     <!-- Delete Button - positioned at top right -->
                     <button onclick="event.stopPropagation(); adminPanel.deleteGalleryConfirm('${gallery.galleryId}')" style="position: absolute; top: 12px; right: 12px; z-index: 3; background: #e74c3c; color: white; border: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.3);" onmouseover="this.style.background='#c0392b'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='#e74c3c'; this.style.transform='scale(1)'">
                         <i class="fas fa-trash"></i>
                     </button>
+                    
+                    <!-- Sort Order Indicator - positioned at bottom left -->
+                    <div class="sort-order-indicator">
+                        #${gallery.sortOrder || index + 1}
+                    </div>
                     
                     <!-- Gallery Info - positioned above overlay -->
                     <div style="position: relative; z-index: 2; margin-top: 40px;">
@@ -331,7 +345,197 @@ class AdminPanel {
             `).join('')}
         `;
         
+        // Setup drag and drop functionality
+        this.setupDragAndDrop();
+        
         // Grid view is now the default and only view
+    }
+    
+    // ==================== DRAG AND DROP FUNCTIONALITY ====================
+    
+    setupDragAndDrop() {
+        const galleryItems = document.querySelectorAll('.gallery-item');
+        const dragHandle = document.querySelectorAll('.drag-handle');
+        
+        if (!galleryItems.length) return;
+        
+        // Setup drag events for each gallery item
+        galleryItems.forEach(item => {
+            const handle = item.querySelector('.drag-handle');
+            if (handle) {
+                handle.addEventListener('dragstart', (e) => this.handleDragStart(e, item));
+                handle.addEventListener('dragend', (e) => this.handleDragEnd(e, item));
+            }
+        });
+        
+        // Setup drop zones
+        galleryItems.forEach(item => {
+            item.addEventListener('dragover', (e) => this.handleDragOver(e, item));
+            item.addEventListener('drop', (e) => this.handleDrop(e, item));
+            item.addEventListener('dragenter', (e) => this.handleDragEnter(e, item));
+            item.addEventListener('dragleave', (e) => this.handleDragLeave(e, item));
+        });
+        
+        console.log('Drag and drop functionality initialized');
+    }
+    
+    handleDragStart(e, item) {
+        e.stopPropagation();
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/html', item.outerHTML);
+        e.dataTransfer.setData('text/plain', item.dataset.galleryId);
+        
+        console.log('Drag started for gallery:', item.dataset.galleryId);
+    }
+    
+    handleDragEnd(e, item) {
+        e.stopPropagation();
+        item.classList.remove('dragging');
+        console.log('Drag ended for gallery:', item.dataset.galleryId);
+    }
+    
+    handleDragOver(e, item) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+    }
+    
+    handleDragEnter(e, item) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!item.classList.contains('dragging')) {
+            item.classList.add('drag-over');
+        }
+    }
+    
+    handleDragLeave(e, item) {
+        e.preventDefault();
+        e.stopPropagation();
+        item.classList.remove('drag-over');
+    }
+    
+    handleDrop(e, item) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const draggedItem = document.querySelector('.dragging');
+        if (!draggedItem) return;
+        
+        item.classList.remove('drag-over');
+        
+        const draggedId = draggedItem.dataset.galleryId;
+        const targetId = item.dataset.galleryId;
+        
+        if (draggedId === targetId) return;
+        
+        console.log(`Dropping gallery ${draggedId} onto ${targetId}`);
+        
+        // Reorder galleries
+        this.reorderGalleries(draggedId, targetId);
+    }
+    
+    reorderGalleries(draggedId, targetId) {
+        console.log('Before reorder:', this.currentFilteredGalleries.map(g => ({name: g.name, sortOrder: g.sortOrder})));
+        
+        const draggedIndex = this.currentFilteredGalleries.findIndex(g => g.galleryId === draggedId);
+        const targetIndex = this.currentFilteredGalleries.findIndex(g => g.galleryId === targetId);
+        
+        if (draggedIndex === -1 || targetIndex === -1) return;
+        
+        // Remove dragged item from array
+        const [draggedGallery] = this.currentFilteredGalleries.splice(draggedIndex, 1);
+        
+        // Insert at target position
+        this.currentFilteredGalleries.splice(targetIndex, 0, draggedGallery);
+        
+        // Update sort order for all galleries
+        this.updateSortOrders();
+        
+        // Refresh the display
+        this.updateGalleriesManageList();
+        
+        // Show save button
+        this.showSaveOrderButton();
+        
+        console.log('After reorder:', this.currentFilteredGalleries.map(g => ({name: g.name, sortOrder: g.sortOrder})));
+    }
+    
+    updateSortOrders() {
+        this.currentFilteredGalleries.forEach((gallery, index) => {
+            gallery.sortOrder = index + 1;
+        });
+        
+        console.log('Updated sort orders:', this.currentFilteredGalleries.map(g => ({
+            name: g.name,
+            sortOrder: g.sortOrder
+        })));
+    }
+    
+    showSaveOrderButton() {
+        // Remove existing save button if any
+        const existingBtn = document.querySelector('.save-order-btn');
+        if (existingBtn) existingBtn.remove();
+        
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'save-order-btn';
+        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save New Order';
+        saveBtn.onclick = () => this.saveGalleryOrder();
+        
+        const sortInfo = document.querySelector('.sort-info');
+        if (sortInfo) {
+            sortInfo.appendChild(saveBtn);
+        }
+    }
+    
+    async saveGalleryOrder() {
+        try {
+            const saveBtn = document.querySelector('.save-order-btn');
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            }
+            
+            // Prepare galleries with updated sort orders
+            const galleriesToUpdate = this.currentFilteredGalleries.map(gallery => ({
+                galleryId: gallery.galleryId,
+                sortOrder: gallery.sortOrder
+            }));
+            
+            console.log('Sending to API:', galleriesToUpdate);
+            const result = await this.api.updateGallerySortOrder(galleriesToUpdate);
+            console.log('API response:', result);
+            
+            if (result.success) {
+                this.showMessage('✅ Gallery order saved successfully!', 'success');
+                
+                // Remove save button
+                const saveBtn = document.querySelector('.save-order-btn');
+                if (saveBtn) saveBtn.remove();
+                
+                // Update the main galleries array
+                this.galleries.forEach(gallery => {
+                    const updatedGallery = this.currentFilteredGalleries.find(g => g.galleryId === gallery.galleryId);
+                    if (updatedGallery) {
+                        gallery.sortOrder = updatedGallery.sortOrder;
+                    }
+                });
+                
+            } else {
+                throw new Error(result.error || 'Failed to save gallery order');
+            }
+            
+        } catch (error) {
+            console.error('Error saving gallery order:', error);
+            this.showMessage('❌ Failed to save gallery order: ' + error.message, 'error');
+            
+            // Re-enable save button
+            const saveBtn = document.querySelector('.save-order-btn');
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> Save New Order';
+            }
+        }
     }
 
     showTab(tabName) {
@@ -1021,6 +1225,30 @@ class GalleryAPI {
             return await response.json();
         } catch (error) {
             console.error('Error updating photos metadata:', error);
+            throw error;
+        }
+    }
+    
+    async updateGallerySortOrder(galleriesData) {
+        try {
+            const response = await fetch(`${this.baseUrl}/galleries?action=update_sort_order`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    galleries: galleriesData
+                })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to update gallery sort order');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error updating gallery sort order:', error);
             throw error;
         }
     }

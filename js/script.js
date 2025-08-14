@@ -72,6 +72,16 @@ class PhotoGalleryApp {
             const data = await response.json();
             galleries = data.galleries || [];
             
+            // Sort galleries by sort order if available
+            if (galleries.length > 0) {
+                galleries.sort((a, b) => {
+                    const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
+                    const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
+                    return orderA - orderB;
+                });
+                console.log('Galleries sorted by sort order');
+            }
+            
             console.log('Successfully loaded galleries from API:', galleries.length);
             return true;
             
@@ -281,6 +291,14 @@ class PhotoGalleryApp {
         this.yearFilter.value = '';
         this.locationFilter.value = '';
         this.currentFilteredGalleries = [...galleries];
+        
+        // Maintain sort order after clearing filters
+        this.currentFilteredGalleries.sort((a, b) => {
+            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
+            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
+            return orderA - orderB;
+        });
+        
         this.loadGalleries();
     }
 
@@ -301,6 +319,13 @@ class PhotoGalleryApp {
             
             const locationMatch = !selectedLocation || (gallery.continent || gallery.country || 'Unknown') === selectedLocation;
             return yearMatch && locationMatch;
+        });
+        
+        // Maintain sort order after filtering
+        this.currentFilteredGalleries.sort((a, b) => {
+            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
+            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
+            return orderA - orderB;
         });
         
         this.loadGalleries();
