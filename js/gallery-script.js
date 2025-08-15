@@ -320,12 +320,28 @@ class GalleryPageApp {
         }
         
         this.fullscreenViewer.style.display = 'flex';
+        this.fullscreenViewer.classList.add('active');
+        document.body.classList.add('fullscreen-active');
         document.body.style.overflow = 'hidden';
+        
+        // Hide header when fullscreen viewer is active
+        const header = document.querySelector('.header');
+        if (header) {
+            header.style.display = 'none';
+        }
     }
 
     closeFullscreenViewer() {
         this.fullscreenViewer.style.display = 'none';
+        this.fullscreenViewer.classList.remove('active');
+        document.body.classList.remove('fullscreen-active');
         document.body.style.overflow = 'auto';
+        
+        // Show header when fullscreen viewer is closed
+        const header = document.querySelector('.header');
+        if (header) {
+            header.style.display = 'block';
+        }
     }
 
     showPreviousPhoto() {

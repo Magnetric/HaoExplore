@@ -1712,6 +1712,11 @@ button.social-link:hover i {
     transition: opacity 0.3s ease;
 }
 
+/* Hide header when fullscreen viewer is active */
+body.fullscreen-active .header {
+    display: none !important;
+}
+
 .fullscreen-viewer.active {
     display: flex;
     opacity: 1;
