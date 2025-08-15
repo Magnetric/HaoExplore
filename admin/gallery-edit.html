@@ -117,8 +117,9 @@
                         <ul>
                             <li>Maximum file size: <strong>50MB per photo</strong></li>
                             <li>Supported formats: JPEG, PNG, WebP, AVIF</li>
-                            <li>Images will be automatically compressed to reduce upload time</li>
-                            <li>Large images will be resized to max 1920px width</li>
+                            <li>Images will be automatically converted to WebP format for optimal quality</li>
+                            <li>Thumbnails will be generated (40% quality, max 2000px width)</li>
+                            <li>Direct S3 upload using presigned URLs (bypasses API Gateway limits)</li>
                         </ul>
                     </div>
                 <div class="form-group">

@@ -18,7 +18,7 @@ body {
     padding: 0 20px;
 }
 
-/* 移动端container优化 */
+/* Mobile container optimization */
 @media (max-width: 768px) {
     .container {
         padding: 0 15px;
@@ -53,7 +53,7 @@ body {
 
 .logo {
     font-family: 'Great Vibes', 'Playfair Display', serif;
-    font-size: 1.5rem;
+    font-size: 1.7rem;
     font-weight: 700;
     color: #2c3e50;
     text-decoration: none;
@@ -79,6 +79,7 @@ body {
     text-decoration: none;
     color: #2c3e50;
     font-weight: 500;
+    font-size: 1.2rem;
     transition: color 0.3s ease;
     position: relative;
 }
@@ -97,6 +98,335 @@ body {
     height: 2px;
     background: #3498db;
     transition: width 0.3s ease;
+}
+
+/* Subscribe Container and Button Styles */
+.subscribe-container {
+    position: relative;
+    margin-left: 20px;
+}
+
+.subscribe-btn {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 20px;
+    font-size: 1.1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+.subscribe-btn:hover {
+    background: linear-gradient(135deg, #2980b9, #1f5f8b);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+}
+
+.subscribe-btn i {
+    font-size: 0.8rem;
+}
+
+/* Subscribe Dropdown Styles */
+.subscribe-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: 340px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.08);
+    margin-top: 12px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1000;
+    border: 1px solid rgba(52, 152, 219, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+.subscribe-dropdown.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.subscribe-dropdown::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    right: 20px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid #ffffff;
+    filter: drop-shadow(0 -2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.subscribe-dropdown-content {
+    padding: 24px;
+    padding-bottom: 12px;
+}
+
+.subscribe-description {
+    color: #5a6c7d;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 20px;
+    text-align: center;
+    font-weight: 400;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.subscribe-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group input {
+    padding: 14px 16px;
+    border: 2px solid #e1e8ed;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(255, 255, 255, 0.8);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 400;
+    color: #2c3e50;
+}
+
+.form-group input::placeholder {
+    color: #95a5a6;
+    font-weight: 400;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #3498db;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    transform: translateY(-1px);
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.form-actions .btn {
+    padding: 12px 20px;
+    font-size: 0.9rem;
+    border-radius: 10px;
+    font-weight: 600;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    border: none;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.form-actions .btn-primary {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+}
+
+.form-actions .btn-primary:hover {
+    background: linear-gradient(135deg, #2980b9 0%, #1f5f8b 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+}
+
+.form-actions .btn-secondary {
+    background: #d7e0e1;
+    color: #2c3e50;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.form-actions .btn-secondary:hover {
+    background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* Subscribe Message Styles */
+.subscribe-message {
+    position: absolute;
+    top: -50px;
+    right: 0;
+    background: white;
+    border-radius: 8px;
+    padding: 10px 15px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    z-index: 1001;
+    animation: slideInDown 0.3s ease-out;
+    white-space: nowrap;
+}
+
+.subscribe-message.subscribe-success {
+    background: #27ae60;
+    color: white;
+    border-left: 4px solid #2ecc71;
+}
+
+.subscribe-message.subscribe-error {
+    background: #e74c3c;
+    color: white;
+    border-left: 4px solid #c0392b;
+}
+
+.subscribe-message i {
+    font-size: 0.9rem;
+}
+
+@keyframes slideInDown {
+    from {
+        transform: translateY(-10px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+
+
+.subscribe-description {
+    color: #7f8c8d;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.subscribe-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-group label {
+    color: #2c3e50;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.form-group input {
+    padding: 12px 16px;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+    background: #fafafa;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #3498db;
+    background: white;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.form-actions .btn {
+    padding: 10px 20px;
+    font-size: 0.9rem;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+/* Mobile Responsive for Subscribe */
+@media (max-width: 768px) {
+    .subscribe-container {
+        margin-left: 15px;
+    }
+    
+    .subscribe-btn {
+        padding: 6px 12px;
+        font-size: 0.8rem;
+    }
+    
+    .subscribe-btn span {
+        display: none;
+    }
+    
+    .subscribe-dropdown {
+        width: 300px;
+        right: -20px;
+        border-radius: 14px;
+    }
+    
+    .subscribe-dropdown::before {
+        right: 30px;
+    }
+    
+    .subscribe-dropdown-content {
+        padding: 20px;
+        padding-bottom: 10px;
+    }
+    
+    .subscribe-description {
+        font-size: 0.9rem;
+        margin-bottom: 18px;
+    }
+    
+    .form-group input {
+        padding: 12px 14px;
+        font-size: 0.9rem;
+        border-radius: 10px;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+        padding: 12px 18px;
+        font-size: 0.9rem;
+    }
+    
+    .subscribe-message {
+        top: -40px;
+        right: -10px;
+        font-size: 0.8rem;
+        padding: 8px 12px;
+        white-space: normal;
+        max-width: 200px;
+    }
 }
 
 .nav-link:hover::after,
@@ -124,11 +454,11 @@ body {
 
 /* Hero Section */
 .hero {
-    /* 直接设置背景图片 */
-    background-image: url('../images/photo-6.webp');
-    background-size: 110%;           /* 初始放大，为动画做准备 */
-    background-position: center;      /* 居中显示图片 */
-    background-repeat: no-repeat;     /* 不重复平铺 */
+    /* Direct background image setting */
+    background-image: url('../images/homephoto.webp');
+    background-size: 110%;           /* Initial zoom, prepare for animation */
+background-position: center;      /* Center the image */
+background-repeat: no-repeat;     /* No repeat tiling */
     color: white;
     padding: 120px 0 80px;
     text-align: center;
@@ -137,10 +467,10 @@ body {
     align-items: center;
     position: relative;
     overflow: hidden;
-    animation: heroZoom 20s ease-in-out infinite; /* 应用动画 */
+    animation: heroZoom 20s ease-in-out infinite; /* Apply animation */
 }
 
-/* 渐变背景覆盖层，用于增强视觉效果 */
+/* Gradient background overlay for enhanced visual effects */
 .hero::after {
     content: '';
     position: absolute;
@@ -154,7 +484,7 @@ body {
 
 
 
-/* 渐进渐远动画关键帧 */
+/* Progressive zoom animation keyframes */
 @keyframes heroZoom {
     0% {
         background-size: 110%;
@@ -167,7 +497,7 @@ body {
     }
 }
 
-/* Hero内容样式 */
+/* Hero content styles */
 .hero-content {
     position: relative;
     z-index: 2;
@@ -253,7 +583,7 @@ body {
     transform: scale(1.1);
 }
 
-/* 确保button元素在social-links中也能正确显示 */
+/* Ensure button elements display correctly in social-links */
 button.social-link {
     display: flex;
     align-items: center;
@@ -341,15 +671,16 @@ button.social-link:hover i {
 
 /* Gallery Section */
 .gallery {
-    padding: 4rem 0;
+    padding: 2rem 0;
     background: #f8f9fa;
+    padding-bottom: 8rem;
 }
 
 .gallery-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 2rem;
-    margin-top: 2rem;
+    margin-top: 0rem;
 }
 
 .gallery-item {
@@ -462,7 +793,7 @@ button.social-link:hover i {
     }
 }
 
-/* 移动端触摸优化 */
+/* Mobile touch optimization */
 @media (hover: none) and (pointer: coarse) {
     .load-more-btn:hover {
         transform: none;
@@ -474,7 +805,7 @@ button.social-link:hover i {
     }
 }
 
-/* 移动端Load More按钮优化 */
+/* Mobile Load More button optimization */
 @media (max-width: 768px) {
     .gallery-load-more {
         margin-top: 2rem;
@@ -519,7 +850,7 @@ button.social-link:hover i {
     margin: 0 auto;
 }
 
-/* 改进弹窗样式 */
+/* Improved popup styles */
 .gallery-popup {
     text-align: center;
     max-width: 280px;
@@ -609,7 +940,7 @@ button.social-link:hover i {
     box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
 }
 
-/* 添加加载动画样式 */
+/* Add loading animation styles */
 .loading-overlay {
     position: absolute;
     top: 0;
@@ -976,7 +1307,7 @@ button.social-link:hover i {
         min-height: 90vh;
     }
     
-    /* 移动端渐进渐远动画优化 */
+    /* Mobile progressive zoom animation optimization */
     .hero {
         animation: heroZoomMobile 15s ease-in-out infinite;
     }
@@ -1029,7 +1360,7 @@ button.social-link:hover i {
         font-size: 1.1rem;
     }
     
-    /* 移动端触摸优化 */
+    /* Mobile touch optimization */
     @media (hover: none) and (pointer: coarse) {
         .social-link:hover {
             transform: none;
@@ -1162,7 +1493,7 @@ button.social-link:hover i {
         font-size: 1rem;
     }
     
-    /* 小屏幕渐进渐远动画优化 */
+    /* Small screen progressive zoom animation optimization */
     .hero {
         animation: heroZoomSmall 12s ease-in-out infinite;
     }
@@ -2064,9 +2395,9 @@ button.social-link:hover i {
     line-height: 1;
 }
 
-/* 移除箭头样式，不再需要 */
+/* Remove arrow styles, no longer needed */
 
-/* 标记点悬停效果 */
+/* Marker hover effects */
 .gallery-map-marker.marker-hover .marker-container {
     transform: scale(1.1);
 }
@@ -2079,7 +2410,7 @@ button.social-link:hover i {
     box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4);
 }
 
-/* 地图筛选控件样式 */
+/* Map filter control styles */
 .map-filter-control {
     position: absolute;
     top: -20px;
@@ -2093,7 +2424,7 @@ button.social-link:hover i {
     border: 1px solid rgba(255, 255, 255, 0.3);
     min-width: 100px;
     max-width: 180px;
-    pointer-events: auto; /* 确保滚轮事件能被捕获 */
+    pointer-events: auto; /* Ensure wheel events can be captured */
 }
 
 .map-filter-control .filter-header {
@@ -2136,8 +2467,8 @@ button.social-link:hover i {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    scroll-behavior: smooth; /* 平滑滚动 */
-    -webkit-overflow-scrolling: touch; /* iOS滚动优化 */
+    scroll-behavior: smooth; /* Smooth scrolling */
+-webkit-overflow-scrolling: touch; /* iOS scroll optimization */
 }
 
 .map-filter-control .year-checkboxes::-webkit-scrollbar {
@@ -2177,10 +2508,10 @@ button.social-link:hover i {
         height: 20px;
         accent-color: #3498db;
         cursor: pointer;
-        min-height: 44px; /* 触摸友好的最小高度 */
+        min-height: 44px; /* Touch-friendly minimum height */
     }
     
-    /* 触摸优化 */
+    /* Touch optimization */
     @media (hover: none) and (pointer: coarse) {
         .map-filter-control .year-option {
             min-height: 48px;
@@ -2248,7 +2579,7 @@ button.social-link:hover i {
     font-size: 1rem;
 }
 
-/* 响应式设计 */
+/* Responsive design */
 @media (max-width: 768px) {
     .map-filter-control {
         position: fixed;
@@ -2265,8 +2596,8 @@ button.social-link:hover i {
         padding: 15px;
         max-height: 60vh;
         overflow: hidden;
-        display: none; /* 移动端默认隐藏 */
-        pointer-events: auto; /* 确保滚轮事件能被捕获 */
+        display: none; /* Hidden by default on mobile */
+pointer-events: auto; /* Ensure wheel events can be captured */
     }
     
     .map-filter-control .filter-header {
@@ -2301,7 +2632,7 @@ button.social-link:hover i {
         border-radius: 12px;
         background: rgba(52, 152, 219, 0.05);
         border: 1px solid rgba(52, 152, 219, 0.1);
-        min-height: 44px; /* 触摸友好的最小高度 */
+        min-height: 44px; /* Touch-friendly minimum height */
     }
     
     .map-filter-control .year-option label {
@@ -2361,8 +2692,8 @@ button.social-link:hover i {
 .contact-content {
     position: relative;
     z-index: 3;
-    width: 100%;           /* 改为100%，避免水平滚动 */
-    max-width: 1600px;     /* 这里控制最大宽度 */
+    width: 100%;           /* Changed to 100% to avoid horizontal scrolling */
+max-width: 1600px;     /* Control maximum width here */
     margin: 0 auto;
     padding: 2rem;
 }
@@ -2397,10 +2728,10 @@ button.social-link:hover i {
     max-width: 2000px;
     margin: 0 auto;
     align-items: center;
-    justify-items: center;  /* 添加这行，让网格项目居中 */
+    justify-items: center;  /* Add this line to center grid items */
 }
 
-/* 确保在小屏幕上网格布局正确 */
+/* Ensure grid layout is correct on small screens */
 @media (max-width: 768px) {
     .contact-grid {
         grid-template-columns: 1fr;
@@ -2421,8 +2752,8 @@ button.social-link:hover i {
     overflow: hidden;
     box-shadow: 0 25px 80px rgba(0, 0, 0, 0.15);
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    width: 100%;  /* 改为100%，不再向左延伸 */
-    margin-left: 0;  /* 移除负边距 */
+    width: 100%;  /* Changed to 100%, no longer extending left */
+margin-left: 0;  /* Remove negative margin */
 }
 
 .photo-container:hover {
@@ -2431,11 +2762,11 @@ button.social-link:hover i {
 }
 
 .photographer-image {
-    width: 100%;  /* 改为100%，适应容器宽度 */
+    width: 100%;  /* Changed to 100%, adapt to container width */
     height: 750px;
     object-fit: cover;
     display: block;
-    /* 移动端图片优化 */
+    /* Mobile image optimization */
     image-rendering: -webkit-optimize-contrast;
     image-rendering: crisp-edges;
 }
@@ -2547,7 +2878,7 @@ button.social-link:hover i {
     box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
 }
 
-/* 移动端触摸优化 */
+/* Mobile touch optimization */
 @media (hover: none) and (pointer: coarse) {
     .contact-link:hover {
         transform: none;
@@ -2606,7 +2937,7 @@ button.contact-link:hover {
     box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
 }
 
-/* 移动端触摸优化 - button版本 */
+/* Mobile touch optimization - button version */
 @media (hover: none) and (pointer: coarse) {
     button.contact-link:hover {
         transform: none;
@@ -2779,7 +3110,7 @@ button.contact-link span {
     }
 }
 
-/* 超小屏幕设备适配 */
+/* Ultra-small screen device adaptation */
 @media (max-width: 360px) {
     .hero-title {
         font-size: 1.8rem;
@@ -2898,7 +3229,7 @@ button.contact-link span {
     }
 }
 
-/* 移动端消息动画优化 */
+/* Mobile message animation optimization */
 @media (max-width: 768px) {
     @keyframes slideIn {
         from {

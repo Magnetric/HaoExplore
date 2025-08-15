@@ -77,11 +77,25 @@ class GalleryPageApp {
             
             if (galleryData) {
                 console.log('Successfully loaded gallery data from API');
+                // Get year from years array if available, otherwise fallback to createdAt
+                let year;
+                if (galleryData.years && Array.isArray(galleryData.years) && galleryData.years.length > 0) {
+                    // If multiple years, join them with commas, otherwise use single year
+                    if (galleryData.years.length > 1) {
+                        year = galleryData.years.map(y => parseInt(y)).sort((a, b) => a - b).join(', ');
+                    } else {
+                        year = parseInt(galleryData.years[0]);
+                    }
+                } else {
+                    // Fallback to createdAt year
+                    year = new Date(galleryData.createdAt).getFullYear();
+                }
+                
                 return {
                     id: galleryData.galleryId || galleryData.id,
                     name: galleryData.name,
                     location: `${galleryData.continent}, ${galleryData.country}`,
-                    year: new Date(galleryData.createdAt).getFullYear(),
+                    year: year,
                     photos: galleryData.photos || [],
                     description: galleryData.description || ''
                 };
@@ -104,7 +118,7 @@ class GalleryPageApp {
             const gallery = await this.getGalleryData();
             
             // Update page title
-            document.title = `${gallery.name} - Light&Lens`;
+            document.title = `Light&Lens - ${gallery.name}`;
             
             // Update gallery header
             this.galleryTitle.textContent = gallery.name;

@@ -6,8 +6,8 @@ class PhotoGalleryApp {
     constructor() {
         this.currentFilteredGalleries = [];
         this.galleryMap = null;
-        this.currentDisplayCount = 10; // 初始显示数量
-        this.itemsPerLoad = 10; // 每次加载数量
+        this.currentDisplayCount = 10; // Initial display count
+        this.itemsPerLoad = 10; // Items per load
         
         // DOM Elements
         this.galleryGrid = document.getElementById('galleryGrid');
@@ -34,6 +34,7 @@ class PhotoGalleryApp {
         this.setupFilters();
         this.setupNavigation();
         this.setupSmoothScrolling();
+        this.setupSubscribeModal();
         
         // Initialize map immediately if galleries exist
         if (galleries.length > 0) {
@@ -94,7 +95,7 @@ class PhotoGalleryApp {
 
     loadGalleries() {
         this.galleryGrid.innerHTML = '';
-        this.currentDisplayCount = this.getInitialDisplayCount(); // 根据屏幕尺寸计算初始显示数量
+        this.currentDisplayCount = this.getInitialDisplayCount(); // Calculate initial display count based on screen size
         
         if (this.currentFilteredGalleries.length === 0) {
             this.galleryGrid.innerHTML = '<div class="no-results">No galleries found matching your criteria.</div>';
@@ -109,31 +110,31 @@ class PhotoGalleryApp {
     }
     
     getInitialDisplayCount() {
-        // 根据屏幕宽度计算应该显示的数量
+        // Calculate display count based on screen width
         const screenWidth = window.innerWidth;
         if (screenWidth <= 768) {
-            return 6; // 移动端显示6个（约两行）
+            return 6; // Mobile: show 6 items (about 2 rows)
         } else if (screenWidth <= 1200) {
-            return 8; // 中等屏幕显示8个
+            return 8; // Medium screen: show 8 items
         } else {
-            return 10; // 大屏幕显示10个（两行，每行5个）
+            return 10; // Large screen: show 10 items (2 rows, 5 per row)
         }
     }
     
     getItemsPerLoad() {
-        // 根据屏幕宽度计算每次加载的数量
+        // Calculate load count based on screen width
         const screenWidth = window.innerWidth;
         if (screenWidth <= 768) {
-            return 6; // 移动端每次加载6个
+            return 6; // Mobile: load 6 items per time
         } else if (screenWidth <= 1200) {
-            return 8; // 中等屏幕每次加载8个
+            return 8; // Medium screen: load 8 items per time
         } else {
-            return 10; // 大屏幕每次加载10个
+            return 10; // Large screen: load 10 items per time
         }
     }
     
     displayGalleries() {
-        // 清空现有内容
+        // Clear existing content
         this.galleryGrid.innerHTML = '';
         
         const galleriesToShow = this.currentFilteredGalleries.slice(0, this.currentDisplayCount);
@@ -153,16 +154,16 @@ class PhotoGalleryApp {
     }
     
     loadMoreGalleries() {
-        // 添加加载状态
+        // Add loading state
         this.loadMoreBtn.classList.add('loading');
         this.loadMoreBtn.innerHTML = '<i class="fas fa-spinner"></i><span>Loading...</span>';
         
-        // 模拟加载延迟，让用户看到加载效果
+        // Simulate loading delay to show loading effect
         setTimeout(() => {
             const previousCount = this.currentDisplayCount;
             this.currentDisplayCount += this.getItemsPerLoad();
             
-            // 只添加新的gallery
+            // Only add new galleries
             const newGalleries = this.currentFilteredGalleries.slice(previousCount, this.currentDisplayCount);
             
             newGalleries.forEach((gallery, index) => {
@@ -173,7 +174,7 @@ class PhotoGalleryApp {
             
             this.updateLoadMoreButton();
             
-            // 移除加载状态
+            // Remove loading state
             this.loadMoreBtn.classList.remove('loading');
             this.loadMoreBtn.innerHTML = '<i class="fas fa-arrow-down"></i><span>Load More</span>';
         }, 300);
@@ -186,14 +187,116 @@ class PhotoGalleryApp {
             });
         }
     }
+
+    setupSubscribeModal() {
+        const subscribeBtn = document.getElementById('subscribeBtn');
+        const subscribeDropdown = document.getElementById('subscribeDropdown');
+        const subscribeCancel = document.getElementById('subscribeCancel');
+        const subscribeForm = document.getElementById('subscribeForm');
+        const subscribeEmail = document.getElementById('subscribeEmail');
+
+        // Toggle dropdown when subscribe button is clicked
+        if (subscribeBtn) {
+            subscribeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                subscribeDropdown.classList.toggle('active');
+                if (subscribeDropdown.classList.contains('active')) {
+                    subscribeEmail.focus();
+                }
+            });
+        }
+
+        // Close dropdown when cancel button is clicked
+        if (subscribeCancel) {
+            subscribeCancel.addEventListener('click', () => {
+                subscribeDropdown.classList.remove('active');
+                subscribeForm.reset();
+            });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!subscribeDropdown.contains(e.target) && !subscribeBtn.contains(e.target)) {
+                subscribeDropdown.classList.remove('active');
+                subscribeForm.reset();
+            }
+        });
+
+        // Handle form submission
+        if (subscribeForm) {
+            subscribeForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleSubscribeSubmit(subscribeEmail.value);
+            });
+        }
+
+        // Close dropdown with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && subscribeDropdown.classList.contains('active')) {
+                subscribeDropdown.classList.remove('active');
+                subscribeForm.reset();
+            }
+        });
+    }
+
+    handleSubscribeSubmit(email) {
+        // Validate email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            this.showSubscribeMessage('Please enter a valid email address.', 'error');
+            return;
+        }
+
+        // Here you would typically send the email to your backend
+        // For now, we'll just show a success message
+        console.log('Subscribe request for email:', email);
+        
+        // Simulate API call
+        setTimeout(() => {
+            this.showSubscribeMessage('Successfully subscribed! You will receive notifications when new galleries are added.', 'success');
+            
+            // Close dropdown and reset form
+            const subscribeDropdown = document.getElementById('subscribeDropdown');
+            const subscribeForm = document.getElementById('subscribeForm');
+            subscribeDropdown.classList.remove('active');
+            subscribeForm.reset();
+        }, 1000);
+    }
+
+    showSubscribeMessage(message, type) {
+        // Remove any existing messages
+        const existingMessage = document.querySelector('.subscribe-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+
+        // Create message element
+        const messageElement = document.createElement('div');
+        messageElement.className = `subscribe-message subscribe-${type}`;
+        messageElement.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check' : 'exclamation-triangle'}"></i>
+            <span>${message}</span>
+        `;
+
+        // Add message to dropdown container
+        const subscribeContainer = document.querySelector('.subscribe-container');
+        subscribeContainer.appendChild(messageElement);
+
+        // Remove message after 5 seconds
+        setTimeout(() => {
+            if (messageElement.parentNode) {
+                messageElement.remove();
+            }
+        }, 5000);
+    }
     
     handleResize() {
-        // 防抖处理，避免频繁触发
+        // Debounce to avoid frequent triggering
         clearTimeout(this.resizeTimeout);
         this.resizeTimeout = setTimeout(() => {
             const newInitialCount = this.getInitialDisplayCount();
             if (newInitialCount !== this.currentDisplayCount) {
-                // 如果初始显示数量发生变化，重新加载gallery
+                // If initial display count changes, reload galleries
                 this.loadGalleries();
             }
         }, 250);
@@ -208,11 +311,15 @@ class PhotoGalleryApp {
         const coverImage = gallery.coverPhotoURL || 'images/placeholder.jpg';
         const location = gallery.continent;
         
-        // Extract latest year from years array
+        // Extract year(s) from years array
         let year = '';
         if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
-            const sortedYears = gallery.years.sort((a, b) => parseInt(b) - parseInt(a));
-            year = sortedYears[0];
+            // If multiple years, join them with commas, otherwise use single year
+            if (gallery.years.length > 1) {
+                year = gallery.years.map(y => parseInt(y)).sort((a, b) => a - b).join(', ');
+            } else {
+                year = parseInt(gallery.years[0]);
+            }
         } else {
             year = new Date(gallery.createdAt).getFullYear();
         }
@@ -521,7 +628,7 @@ class GalleryMap {
             this.updateMarkerSizes();
         });
         
-        // 添加Year Filter的滚轮事件处理
+        // Add wheel event handling for Year Filter
         this.setupYearFilterWheelEvents();
     }
 
@@ -594,70 +701,70 @@ class GalleryMap {
         
         console.log('Setting up wheel events for Year Filter container:', yearFilterContainer);
         
-        // 为整个Year Filter容器添加滚轮事件处理
+        // Add wheel event handling for the entire Year Filter container
         yearFilterContainer.addEventListener('wheel', (e) => {
             console.log('Wheel event on main container');
             e.stopPropagation();
             e.preventDefault();
             
-            // 手动处理滚动
+            // Manual scroll handling
             const yearCheckboxes = yearFilterContainer.querySelector('.year-checkboxes');
             if (yearCheckboxes) {
-                const scrollAmount = e.deltaY > 0 ? 30 : -30; // 滚动量
+                const scrollAmount = e.deltaY > 0 ? 30 : -30; // Scroll amount
                 yearCheckboxes.scrollTop += scrollAmount;
                 console.log('Scrolled year checkboxes by:', scrollAmount, 'New scrollTop:', yearCheckboxes.scrollTop);
             }
         }, { passive: false });
         
-        // 为Year Filter内的所有子元素添加滚轮事件处理
+        // Add wheel event handling for all child elements in Year Filter
         this.setupWheelEventForElement(yearFilterContainer);
         
-        // 确保整个区域都能响应滚轮事件
+        // Ensure the entire area responds to wheel events
         this.ensureFullWheelCoverage(yearFilterContainer);
         
         console.log('Year Filter wheel events configured');
     }
     
     setupWheelEventForElement(element) {
-        // 为元素及其所有子元素添加滚轮事件处理
+        // Add wheel event handling for element and all its children
         const addWheelEvent = (el) => {
             el.addEventListener('wheel', (e) => {
                 console.log('Wheel event on element:', el.tagName, el.className);
-                // 阻止事件冒泡到地图，但允许滚动处理
+                // Prevent event bubbling to map, but allow scroll handling
                 e.stopPropagation();
                 
-                // 查找最近的父级滚动容器
+                // Find the nearest parent scroll container
                 const scrollContainer = el.closest('.year-checkboxes') || 
                                      el.closest('.map-filter-control');
                 
                 if (scrollContainer) {
-                    // 手动处理滚动
+                    // Manual scroll handling
                     const scrollAmount = e.deltaY > 0 ? 30 : -30;
                     scrollContainer.scrollTop += scrollAmount;
                     console.log('Scrolled container by:', scrollAmount, 'New scrollTop:', scrollContainer.scrollTop);
                 }
                 
-                // 阻止默认行为
+                // Prevent default behavior
                 e.preventDefault();
             }, { passive: false });
         };
         
-        // 为当前元素添加
+        // Add for current element
         addWheelEvent(element);
         
-        // 为所有子元素添加
+        // Add for all child elements
         const allChildren = element.querySelectorAll('*');
         allChildren.forEach(child => {
             addWheelEvent(child);
         });
         
-        // 监听新添加的元素
+        // Monitor newly added elements
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 mutation.addedNodes.forEach((node) => {
                     if (node.nodeType === Node.ELEMENT_NODE) {
                         addWheelEvent(node);
-                        // 为新元素的子元素也添加事件
+                        // Also add events for child elements of new elements
                         const newChildren = node.querySelectorAll('*');
                         newChildren.forEach(child => {
                             addWheelEvent(child);
@@ -674,11 +781,11 @@ class GalleryMap {
     }
     
     ensureFullWheelCoverage(container) {
-        // 确保整个容器区域都能响应滚轮事件
-        // 通过设置CSS属性来确保事件能被正确捕获
+        // Ensure the entire container area responds to wheel events
+        // Set CSS properties to ensure events are captured correctly
         container.style.pointerEvents = 'auto';
         
-        // 为容器的所有直接子元素添加滚轮事件处理
+        // Add wheel event handling for all direct child elements of container
         const directChildren = Array.from(container.children);
         directChildren.forEach(child => {
             if (child.tagName !== 'DIV' || !child.classList.contains('wheel-overlay')) {
@@ -687,7 +794,7 @@ class GalleryMap {
                     e.stopPropagation();
                     e.preventDefault();
                     
-                    // 手动处理滚动
+                    // Manual scroll handling
                     const yearCheckboxes = container.querySelector('.year-checkboxes');
                     if (yearCheckboxes) {
                         const scrollAmount = e.deltaY > 0 ? 30 : -30;
@@ -1090,7 +1197,7 @@ function showCopySuccess() {
     message.className = 'copy-message copy-success';
     message.innerHTML = '<i class="fas fa-check"></i> Wechat ID copied';
     
-    // 移动端适配的消息样式
+    // Mobile-adapted message styles
     const isMobile = window.innerWidth <= 768;
     message.style.cssText = `
         position: fixed;
@@ -1124,9 +1231,9 @@ function showCopyError() {
     // Create error message
     const message = document.createElement('div');
     message.className = 'copy-message copy-error';
-    message.innerHTML = '<i class="fas fa-times"></i> 复制失败，请手动复制：Magnetrician';
+    message.innerHTML = '<i class="fas fa-times"></i> Copy failed, please copy manually: Magnetrician';
     
-    // 移动端适配的消息样式
+    // Mobile-adapted message styles
     const isMobile = window.innerWidth <= 768;
     message.style.cssText = `
         position: fixed;

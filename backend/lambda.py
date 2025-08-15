@@ -80,7 +80,7 @@ def lambda_handler(event, context):
             return update_galleries_metadata()
         elif action_param == 'update_GalleryPhotos':
             logger.info("Routing to update_GalleryPhotos()")
-            return update_GalleryPhotos()
+            return update_GalleryPhotos(body)
         elif action_param == 'delete_photo':
             logger.info("Routing to delete_photo()")
             gallery_id = query_params.get('id')
@@ -99,6 +99,13 @@ def lambda_handler(event, context):
         elif action_param == 'update_photo_sort_order':
             logger.info("Routing to update_photo_sort_order()")
             return update_photo_sort_order(body)
+        elif action_param == 'get_upload_urls':
+            logger.info("Routing to get_upload_urls()")
+            gallery_id = query_params.get('id')
+            if gallery_id:
+                return get_upload_urls(gallery_id, body)
+            else:
+                return create_response(400, {'error': 'Gallery ID required for getting upload URLs'})
         else:
             logger.info("Routing to create_gallery()")
             return create_gallery(body)
@@ -766,7 +773,7 @@ def upload_photos(gallery_id, upload_data):
             except Exception as e:
                 logger.warning(f"Thumbnail generation failed for {filename}: {e}")
 
-            # 生成照片元数据
+            # Generate photo metadata
             photo_metadata = {
                 'galleryId': str(gallery_id),
                 'photoId': unique_id,
@@ -780,7 +787,7 @@ def upload_photos(gallery_id, upload_data):
                 'sortOrder': current_photo_count + photo_index + 1  # Add sort order based on existing photos + upload order
             }
                 
-            # 图片尺寸 & 文件大小
+            # Image dimensions & file size
             try:
                 image = Image.open(io.BytesIO(image_bytes))
                 photo_metadata['width'] = image.width
@@ -789,10 +796,10 @@ def upload_photos(gallery_id, upload_data):
             except Exception as e:
                 logger.warning(f"Could not extract metadata for {filename}: {e}")
                 
-            # 存到 DynamoDB
+            # Store to DynamoDB
             tbl_gallery_photos.put_item(Item=photo_metadata)
 
-            # 前端返回结构
+            # Frontend response structure
             uploaded_photos.append({
                 **photo_metadata,
                 'id': photo_metadata['photoId']
@@ -801,7 +808,7 @@ def upload_photos(gallery_id, upload_data):
         if not uploaded_photos:
             return create_response(400, {'error': 'No photos were successfully uploaded'})
         
-        # 更新画廊信息
+        # Update gallery information
         update_expr = "SET photoCount = :pc, updatedAt = :now"
         expr_vals = {
             ':pc': (gallery.get('photoCount') or 0) + len(uploaded_photos),
@@ -838,7 +845,7 @@ def delete_photo(gallery_id: str, payload: dict):
         photo_number = payload.get('photoNumber')
         s3_key = payload.get('s3Key')
 
-        # 从 DynamoDB 查找记录
+        # Find record from DynamoDB
         from boto3.dynamodb.conditions import Key
         item = None
 
@@ -855,19 +862,38 @@ def delete_photo(gallery_id: str, payload: dict):
         if not item:
             return create_response(404, {'error': 'Photo not found'})
 
-        # 删 S3 原图
+        # Delete S3 original image
         if item.get('s3Key'):
             try:
                 s3_client.delete_object(Bucket=BUCKET_NAME, Key=item['s3Key'])
             except ClientError:
                 pass
 
-        # 删 DynamoDB 记录
+        # Delete S3 thumbnail
+        if item.get('thumbnail'):
+            try:
+                # Extract S3 key from thumbnail URL
+                # Thumbnail URL format: https://bucket.s3.region.amazonaws.com/galleries/continent/country/gallery_name/thumbnails/filename.jpg
+                thumbnail_url = item['thumbnail']
+                if 'thumbnails/' in thumbnail_url and f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/' in thumbnail_url:
+                    # Extract S3 key part
+                    thumbnail_key = thumbnail_url.split(f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/')[1]
+                    if thumbnail_key and not thumbnail_key.endswith('/'):
+                        s3_client.delete_object(Bucket=BUCKET_NAME, Key=thumbnail_key)
+                        logger.info(f"Deleted thumbnail: {thumbnail_key}")
+                    else:
+                        logger.warning(f"Invalid thumbnail key extracted: {thumbnail_key}")
+                else:
+                    logger.info(f"Thumbnail URL doesn't match expected pattern or is not a S3 thumbnail: {thumbnail_url}")
+            except Exception as e:
+                logger.warning(f"Failed to delete thumbnail: {e}")
+
+        # Delete DynamoDB record
         tbl_gallery_photos.delete_item(
             Key={'galleryId': str(gallery_id), 'photoId': str(item.get('photoId') or item.get('photoNumber'))}
         )
 
-        # 更新 gallery 计数
+        # Update gallery count
         now_ts = datetime.utcnow().isoformat() + 'Z'
         tbl_galleries.update_item(
             Key={'galleryId': str(gallery_id)},
@@ -875,7 +901,7 @@ def delete_photo(gallery_id: str, payload: dict):
             ExpressionAttributeValues={':z': 0, ':one': 1, ':now': now_ts}
         )
 
-        # 如果删除的是封面，移除 coverPhotoURL
+        # If the deleted photo is the cover, remove coverPhotoURL
         g = tbl_galleries.get_item(Key={'galleryId': str(gallery_id)}).get('Item') or {}
         current_cover_photo_url = g.get('coverPhotoURL')
         if current_cover_photo_url:
@@ -1126,15 +1152,133 @@ def update_galleries_metadata():
         return create_response(500, {'error': 'Failed to update galleries metadata', 'details': str(e)})
 
 
-def update_GalleryPhotos():
+def update_GalleryPhotos(request_body=None):
+    """
+    Update DynamoDB GalleryPhotos table with uploaded photo information.
+    This function can either scan S3 for all photos (when called without body)
+    or update specific photos from the request body (new upload flow).
+    """
+    try:
+        # Check if this is a new upload flow (with request body) or S3 scan flow
+        if request_body and 'galleryId' in request_body and 'photos' in request_body:
+            logger.info("Starting update_GalleryPhotos - processing new uploads")
+            return process_new_uploads(request_body)
+        else:
+            logger.info("Starting update_GalleryPhotos - scanning S3 for all photos")
+            return scan_s3_for_photos()
+        
+    except Exception as e:
+        logger.error(f"Error in update_GalleryPhotos: {str(e)}")
+        return create_response(500, {
+            'error': f'Failed to update gallery photos: {str(e)}'
+        })
+
+
+def process_new_uploads(request_data):
+    """
+    Process new photo uploads and add them to DynamoDB GalleryPhotos table
+    """
+    try:
+        logger.info(f"Processing new uploads with data: {request_data}")
+        
+        gallery_id = request_data['galleryId']
+        photos_data = request_data['photos']
+        
+        if not isinstance(photos_data, list) or len(photos_data) == 0:
+            return create_response(400, {'error': 'Photos must be a non-empty array'})
+        
+        # Validate each photo entry
+        for photo in photos_data:
+            required_fields = ['filename', 'thumbnailFilename', 's3Key', 'thumbnailKey', 'contentType']
+            for field in required_fields:
+                if field not in photo:
+                    return create_response(400, {'error': f'Each photo must have {field}'})
+        
+        # Process each photo
+        photos_created = 0
+        errors = []
+        
+        for photo in photos_data:
+            try:
+                # Generate unique photo ID
+                photo_id = str(uuid.uuid4())
+                
+                # Build URLs
+                base_url = f"https://{BUCKET_NAME}.s3.eu-north-1.amazonaws.com"
+                image_url = f"{base_url}/{photo['s3Key']}"
+                thumbnail_url = f"{base_url}/{photo['thumbnailKey']}"
+                
+                # Prepare photo data for DynamoDB
+                now = datetime.utcnow().isoformat() + 'Z'
+                photo_data = {
+                    'galleryId': gallery_id,
+                    'photoId': photo_id,
+                    'name': photo['filename'].rsplit('.', 1)[0],  # filename without extension
+                    's3Key': photo['s3Key'],
+                    'thumbnailKey': photo['thumbnailKey'],
+                    'image': image_url,
+                    'thumbnail': thumbnail_url,
+                    'uploadedAt': now,
+                    'format': photo['contentType'].split('/')[-1].upper(),
+                    'lastModified': now,
+                    'fileSize': format_file_size(photo.get('fileSize', 0)),
+                    'thumbnailSize': format_file_size(photo.get('thumbnailSize', 0))
+                }
+                
+                # Add dimensions if available
+                if 'width' in photo and 'height' in photo:
+                    photo_data['dimensions'] = f"{photo['width']}x{photo['height']}"
+                
+                # Create new photo in DynamoDB
+                logger.info(f"Creating new photo: {photo['filename']}")
+                tbl_gallery_photos.put_item(Item=photo_data)
+                photos_created += 1
+                
+                # Add the created photo to the response
+                photo_data['id'] = photo_id
+                photo_data['title'] = photo_data['name']
+                
+            except Exception as e:
+                error_msg = f"Error processing photo {photo['filename']}: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+                continue
+        
+        if errors:
+            if photos_created == 0:
+                return create_response(500, {
+                    'error': 'All photo uploads failed',
+                    'details': errors
+                })
+            else:
+                return create_response(200, {
+                    'success': True,
+                    'message': f'Partially processed photo uploads: {photos_created} successful, {len(errors)} failed',
+                    'photos_created': photos_created,
+                    'errors': errors,
+                    'partial_success': True
+                })
+        else:
+            return create_response(200, {
+                'success': True,
+                'message': f'Successfully processed {photos_created} photo uploads',
+                'photos_created': photos_created
+            })
+            
+    except Exception as e:
+        logger.error(f"Error in process_new_uploads: {str(e)}")
+        return create_response(500, {
+            'error': f'Failed to process new uploads: {str(e)}'
+        })
+
+
+def scan_s3_for_photos():
     """
     Scan S3 for all photos and update DynamoDB GalleryPhotos table.
     This function scans S3 folder structure to find all photos, extracts metadata,
     and upserts them to DynamoDB GalleryPhotos table.
     """
     try:
-        logger.info("Starting update_GalleryPhotos - scanning S3 for all photos")
-        
         # Scan S3 for all photos
         photos_updated = 0
         photos_created = 0
@@ -1792,4 +1936,111 @@ def update_photo_sort_order(request_data):
             'success': False,
             'error': 'Failed to update photo sort order',
             'details': str(e)
+        })
+
+
+def get_upload_urls(gallery_id, request_data):
+    """
+    Generate presigned URLs for S3 uploads to bypass API Gateway size limits
+    """
+    try:
+        logger.info(f"Generating upload URLs for gallery {gallery_id}")
+        
+        # Get gallery information to build correct S3 path
+        try:
+            gallery_response = tbl_galleries.get_item(Key={'galleryId': gallery_id})
+            if 'Item' not in gallery_response:
+                return create_response(400, {'error': f'Gallery {gallery_id} not found'})
+            
+            gallery = gallery_response['Item']
+            continent = gallery.get('continent', 'unknown')
+            country = gallery.get('country', 'unknown')
+            name = gallery.get('name', 'unknown')
+            
+            # Build the correct gallery path: galleries/continent/country/name/
+            gallery_path = f"galleries/{continent}/{country}/{name}"
+            logger.info(f"Gallery path: {gallery_path}")
+            
+        except Exception as e:
+            logger.error(f"Error getting gallery info: {str(e)}")
+            return create_response(500, {'error': f'Failed to get gallery information: {str(e)}'})
+        
+        # Validate request data
+        if 'photos' not in request_data:
+            return create_response(400, {'error': 'Missing photos array in request'})
+        
+        photos_data = request_data['photos']
+        if not isinstance(photos_data, list) or len(photos_data) == 0:
+            return create_response(400, {'error': 'Photos must be a non-empty array'})
+        
+        # Validate each photo entry
+        for photo in photos_data:
+            if 'filename' not in photo:
+                return create_response(400, {'error': 'Each photo must have filename'})
+            if 'thumbnailFilename' not in photo:
+                return create_response(400, {'error': 'Each photo must have thumbnailFilename'})
+        
+        # Generate presigned URLs for each photo
+        upload_urls = []
+        
+        for photo in photos_data:
+            try:
+                # Generate unique photo ID
+                photo_id = str(uuid.uuid4())
+                
+                # Create S3 keys using the correct gallery path
+                # Original: galleries/continent/country/gallery_name/filename.webp
+                # Thumbnail: galleries/continent/country/gallery_name/thumbnails/filename_thumb.webp
+                original_key = f"{gallery_path}/{photo['filename']}"
+                thumbnail_key = f"{gallery_path}/thumbnails/{photo['thumbnailFilename']}"
+                
+                # Generate presigned URLs for PUT operations
+                original_url = s3_client.generate_presigned_url(
+                    'put_object',
+                    Params={
+                        'Bucket': BUCKET_NAME,
+                        'Key': original_key,
+                        'ContentType': photo.get('contentType', 'image/webp')
+                    },
+                    ExpiresIn=3600  # 1 hour expiration
+                )
+                
+                thumbnail_url = s3_client.generate_presigned_url(
+                    'put_object',
+                    Params={
+                        'Bucket': BUCKET_NAME,
+                        'Key': thumbnail_key,
+                        'ContentType': photo.get('contentType', 'image/webp')
+                    },
+                    ExpiresIn=3600  # 1 hour expiration
+                )
+                
+                upload_urls.append({
+                    'photo_id': photo_id,
+                    'original_url': original_url,
+                    'thumbnail_url': thumbnail_url,
+                    'original_key': original_key,
+                    'thumbnail_key': thumbnail_key
+                })
+                
+                logger.info(f"Generated presigned URLs for photo {photo_id}")
+                
+            except Exception as e:
+                logger.error(f"Error generating presigned URLs for photo {photo.get('filename', 'unknown')}: {str(e)}")
+                return create_response(500, {
+                    'error': f'Failed to generate presigned URLs: {str(e)}'
+                })
+        
+        logger.info(f"Successfully generated {len(upload_urls)} presigned URLs")
+        
+        return create_response(200, {
+            'success': True,
+            'upload_urls': upload_urls,
+            'message': f'Generated {len(upload_urls)} presigned URLs'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_upload_urls: {str(e)}")
+        return create_response(500, {
+            'error': f'Failed to generate upload URLs: {str(e)}'
         })

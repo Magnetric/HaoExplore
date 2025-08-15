@@ -4,7 +4,6 @@
 // ==================== CONFIGURATION ====================
 const API_BASE_URL = 'https://5nuxhstp12.execute-api.eu-north-1.amazonaws.com/prod';
 
-
 // ==================== API CLIENT ====================
 class GalleryAPI {
     constructor(baseUrl) {
@@ -68,6 +67,53 @@ class GalleryAPI {
         }
         return await response.json();
     }
+
+    async getUploadUrls(galleryId, photosData) {
+        try {
+            const response = await fetch(`${this.baseUrl}/galleries?id=${galleryId}&action=get_upload_urls`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ photos: photosData })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to get upload URLs');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error getting upload URLs:', error);
+            throw error;
+        }
+    }
+
+    async updateGalleryPhotos(galleryId, photosData) {
+        try {
+            const response = await fetch(`${this.baseUrl}/galleries?action=update_GalleryPhotos`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    galleryId: galleryId,
+                    photos: photosData
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to update gallery photos');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error updating gallery photos:', error);
+            throw error;
+        }
+    }
 }
 
 // Initialize API client
@@ -82,8 +128,44 @@ let originalPhotos = []; // Store original photo data to detect changes
 let isFormModified = false; // Track form modification state
 
 // ==================== UTILITY FUNCTIONS ====================
-// Compress image before upload to reduce payload size
-async function compressImage(file, maxWidth = 1920, quality = 0.8) {
+// Convert image to WebP format with optimized compression
+async function convertToWebP(file, quality = 0.8) {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        img.onload = () => {
+            // Get original image dimensions
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+
+            // Set canvas size to original dimensions
+            canvas.width = w;
+            canvas.height = h;
+
+            // Enable high quality image smoothing
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
+            // Draw the original image to canvas
+            ctx.drawImage(img, 0, 0, w, h);
+
+            // Convert canvas to WebP Blob
+            canvas.toBlob((blob) => {
+                blob.width = w;
+                blob.height = h;
+                resolve(blob);
+            }, 'image/webp', quality);
+        };
+
+        img.src = URL.createObjectURL(file);
+    });
+}
+
+
+// Generate thumbnail with optimized compression
+async function generateThumbnail(file, maxWidth = 2000, quality = 0.4) {
     return new Promise((resolve) => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -97,18 +179,55 @@ async function compressImage(file, maxWidth = 1920, quality = 0.8) {
                 width = maxWidth;
             }
             
+            // For thumbnails, we can be more aggressive with size reduction
+            // If the calculated size is still large, reduce it further
+            if (width > 1500) {
+                const scale = 1500 / width;
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
+            }
+            
             canvas.width = width;
             canvas.height = height;
             
-            // Draw and compress
+            // Use high-quality image smoothing for better thumbnail quality
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            
+            // Draw and compress with optimized settings
             ctx.drawImage(img, 0, 0, width, height);
             canvas.toBlob((blob) => {
+                // Add dimensions to blob for reference
+                blob.width = width;
+                blob.height = height;
                 resolve(blob);
-            }, 'image/jpeg', quality);
+            }, 'image/webp', quality);
         };
         
         img.src = URL.createObjectURL(file);
     });
+}
+
+// Upload file to S3 using presigned URL
+async function uploadToS3(presignedUrl, file) {
+    try {
+        const response = await fetch(presignedUrl, {
+            method: 'PUT',
+            body: file,
+            headers: {
+                'Content-Type': file.type,
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`S3 upload failed: ${response.status} ${response.statusText}`);
+        }
+
+        return true;
+    } catch (error) {
+        console.error('S3 upload error:', error);
+        throw error;
+    }
 }
 
 // Normalize gallery object returned from DynamoDB to the shape the editor expects
@@ -369,7 +488,7 @@ function updatePhotosGrid() {
                         <div class="metadata-item">
                             <i class="fas fa-file-alt metadata-icon"></i>
                             <span class="metadata-label">File Size:</span>
-                            <span class="metadata-value">${photo.imageSizeBytes ? formatFileSize(photo.imageSizeBytes) : (photo.fileSize ? formatFileSize(photo.fileSize) : 'Unknown')}</span>
+                            <span class="metadata-value">${photo.fileSize}</span>
                         </div>
                     </div>
                     <div class="metadata-row">
@@ -515,7 +634,6 @@ function handleFileSelect(event) {
 
 // Upload photos functionality
 async function uploadPhotos() {
-
     const photosToUpload = window.selectedFiles;
     const uploadBtn = document.getElementById('uploadBtn');
     const progressDiv = document.getElementById('uploadProgress');
@@ -527,11 +645,11 @@ async function uploadPhotos() {
         if (progressDiv) progressDiv.style.display = 'block';
         if (uploadBtn) {
             uploadBtn.disabled = true;
-            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
         }
         
-        // Process files and convert to base64 with compression
-        const photosData = [];
+        // Process files: convert to WebP and generate thumbnails
+        const processedPhotos = [];
         let totalSize = 0;
         
         for (let i = 0; i < photosToUpload.length; i++) {
@@ -544,102 +662,128 @@ async function uploadPhotos() {
             }
             
             try {
-                // Compress image before upload
-                const compressedBlob = await compressImage(photo);
-                totalSize += compressedBlob.size;
+                // Update progress
+                const progress = ((i + 0.3) / photosToUpload.length) * 100;
+                if (progressFill) progressFill.style.width = `${progress}%`;
+                if (progressText) progressText.textContent = `Processing ${i + 1}/${photosToUpload.length}`;
                 
-                // Convert compressed file to base64
-                const base64Data = await fileToBase64(compressedBlob);
-                photosData.push({
-                    filename: photo.name.replace(/\.[^/.]+$/, '.jpg'), // Change extension to .jpg
-                    image: base64Data,
-                    contentType: 'image/jpeg'
+                // Convert to WebP format
+                const webpBlob = await convertToWebP(photo);
+                
+                // Generate thumbnail
+                const thumbnailBlob = await generateThumbnail(photo);
+                
+                // Calculate total size
+                totalSize += webpBlob.size + thumbnailBlob.size;
+                
+                processedPhotos.push({
+                    originalFile: photo,
+                    webpBlob: webpBlob,
+                    thumbnailBlob: thumbnailBlob,
+                    filename: photo.name.replace(/\.[^/.]+$/, '.webp'),
+                    thumbnailFilename: photo.name.replace(/\.[^/.]+$/, '_thumb.webp')
                 });
                 
-                console.log(`Compressed ${photo.name}: ${(photo.size / 1024 / 1024).toFixed(2)}MB -> ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB`);
+                console.log(`Processed ${photo.name}: WebP ${(webpBlob.size / 1024 / 1024).toFixed(2)}MB, Thumbnail ${(thumbnailBlob.size / 1024 / 1024).toFixed(2)}MB`);
             } catch (error) {
                 console.error(`Error processing ${photo.name}:`, error);
                 showMessage(`Error processing ${photo.name}: ${error.message}`, 'error');
                 continue;
             }
-            
-            // Update progress
-            const progress = ((i + 1) / photosToUpload.length) * 100;
-            if (progressFill) progressFill.style.width = `${progress}%`;
-            if (progressText) progressText.textContent = `${Math.round(progress)}%`;
         }
         
-        if (photosData.length === 0) {
+        if (processedPhotos.length === 0) {
             showMessage('No valid files to upload', 'error');
             return;
         }
         
-        // Upload to Lambda API
-        console.log('Sending upload request to Lambda API...');
-        console.log('Gallery ID:', currentGallery.id);
-        console.log('Photos count:', photosData.length);
-        console.log('Total payload size:', (totalSize / 1024 / 1024).toFixed(2), 'MB');
-
-        let result;
-        try {
-            const response = await fetch(`${API_BASE_URL}/galleries?id=${currentGallery.id}&action=upload_photos`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    photos: photosData
-                })
-            });
-            
-            console.log('Response status:', response.status);
-            console.log('Response ok:', response.ok);
-            
-            if (!response.ok) {
-                let errorMessage = 'Upload failed';
-                try {
-                    const errorData = await response.json();
-                    console.error('Upload failed with error:', errorData);
-                    errorMessage = errorData.error || errorMessage;
-                } catch (parseError) {
-                    console.error('Could not parse error response:', parseError);
-                    if (response.status === 413) {
-                        errorMessage = 'File too large for upload. Please try smaller images.';
-                    } else if (response.status === 0) {
-                        errorMessage = 'Network error. Please check your connection.';
-                    } else {
-                        errorMessage = `Upload failed with status: ${response.status}`;
-                    }
-                }
-                throw new Error(errorMessage);
-            }
-            
-            result = await response.json();
-        } catch (fetchError) {
-            console.error('Fetch error:', fetchError);
-            throw new Error('Network error: ' + fetchError.message);
+        // Get presigned URLs from Lambda
+        if (uploadBtn) {
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Getting upload URLs...';
         }
         
-        console.log('Upload successful, result:', result);
+        const photosData = processedPhotos.map(photo => ({
+            filename: photo.filename,
+            thumbnailFilename: photo.thumbnailFilename,
+            contentType: 'image/webp'
+        }));
+        
+        console.log('Getting presigned URLs for', photosData.length, 'photos');
+        const uploadUrls = await galleryAPI.getUploadUrls(currentGallery.id, photosData);
+        
+        if (!uploadUrls.success) {
+            throw new Error(uploadUrls.error || 'Failed to get upload URLs');
+        }
+        
+        // Upload files to S3 using presigned URLs
+        if (uploadBtn) {
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading to S3...';
+        }
+        
+        const uploadedPhotos = [];
+        
+        for (let i = 0; i < processedPhotos.length; i++) {
+            const photo = processedPhotos[i];
+            const urls = uploadUrls.upload_urls[i];
+            
+            try {
+                // Update progress
+                const progress = ((i + 0.7) / processedPhotos.length) * 100;
+                if (progressFill) progressFill.style.width = `${progress}%`;
+                if (progressText) progressText.textContent = `Uploading ${i + 1}/${processedPhotos.length}`;
+                
+                // Upload original WebP
+                await uploadToS3(urls.original_url, photo.webpBlob);
+                
+                // Upload thumbnail
+                await uploadToS3(urls.thumbnail_url, photo.thumbnailBlob);
+                
+                // Prepare photo data for DynamoDB
+                uploadedPhotos.push({
+                    filename: photo.filename,
+                    thumbnailFilename: photo.thumbnailFilename,
+                    s3Key: urls.original_key,
+                    thumbnailKey: urls.thumbnail_key,
+                    contentType: 'image/webp',
+                    fileSize: photo.webpBlob.size,
+                    thumbnailSize: photo.thumbnailBlob.size,
+                    width: photo.webpBlob.width || photo.originalFile.naturalWidth,
+                    height: photo.webpBlob.height || photo.originalFile.naturalHeight
+                });
+                
+                console.log(`Uploaded ${photo.filename} successfully`);
+            } catch (error) {
+                console.error(`Error uploading ${photo.filename}:`, error);
+                showMessage(`Error uploading ${photo.filename}: ${error.message}`, 'error');
+                continue;
+            }
+        }
+        
+        if (uploadedPhotos.length === 0) {
+            throw new Error('No photos were uploaded successfully');
+        }
+        
+        // Update DynamoDB with uploaded photo information
+        if (uploadBtn) {
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating database...';
+        }
+        
+        console.log('Updating DynamoDB with', uploadedPhotos.length, 'photos');
+        const dbResult = await galleryAPI.updateGalleryPhotos(currentGallery.id, uploadedPhotos);
+        
+        console.log('Database update successful:', dbResult);
         
         // Add uploaded photos to current gallery
-        if (result.uploaded_photos && result.uploaded_photos.length > 0) {
+        if (dbResult.success && dbResult.photos_created > 0) {
             console.log('Adding uploaded photos to current gallery...');
-            currentGallery.photos.push(...result.uploaded_photos);
             
-            // Update display
-            updatePhotosGrid();
-            updateGalleryInfo();
+            // Reload the gallery to get the updated photo list
+            await loadGallery();
             
-            // Update cover photo if none exists
-            if (!currentGallery.coverPhoto && result.uploaded_photos.length > 0) {
-                currentGallery.coverPhoto = result.uploaded_photos[0];
-                updateCoverPhotoDisplay();
-            }
-            
-            showMessage(`Successfully uploaded ${result.uploaded_photos.length} photos!`, 'success');
+            showMessage(`Successfully uploaded ${dbResult.photos_created} photos!`, 'success');
         } else {
-            console.warn('No uploaded photos in result');
+            console.warn('No photos were created in database');
+            showMessage('Photos uploaded to S3 but database update failed', 'warning');
         }
         
         // Close modal and reset

@@ -760,7 +760,7 @@
     background-color: rgba(255, 255, 255, 0.2);
 }
 
-/* 移除add-year-form样式，因为不再使用这个容器 */
+/* Remove add-year-form styles as this container is no longer used */
 
 /* Photo grid styles for gallery edit */
 .photo-item {
@@ -1782,7 +1782,7 @@
 /* Sort Order Indicator */
 .sort-order-indicator {
     position: absolute;
-    top: 12px;
+    bottom: 12px;
     right: 12px;
     background: rgba(52, 152, 219, 0.9);
     color: white;

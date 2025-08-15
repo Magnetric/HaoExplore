@@ -31,7 +31,28 @@
                     <li><a href="#contact" class="nav-link">Contact</a></li>
                 </ul>
             </nav>
+            <div class="subscribe-container">
+                <button class="subscribe-btn" id="subscribeBtn">
+                    <i class="fas fa-bell"></i>
+                    <span>Subscribe</span>
+                </button>
+                <div class="subscribe-dropdown" id="subscribeDropdown">
+                    <div class="subscribe-dropdown-content">
+                        <p class="subscribe-description">Subscribe to receive notifications when new galleries are added.</p>
+                        <form class="subscribe-form" id="subscribeForm">
+                            <div class="form-group">
+                                <input type="email" id="subscribeEmail" name="email" placeholder="Enter your email address" required>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Subscribe</button>
+                                <button type="button" class="btn btn-secondary" id="subscribeCancel">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
+        
     </header>
 
     <main>
@@ -117,7 +138,7 @@
                             </button>
                         </div>
                         <div class="year-checkboxes" id="mapYearCheckboxes">
-                            <!-- 年份选项将在这里动态生成 -->
+                            <!-- Year options will be generated here dynamically -->
                         </div>
                     </div>
                     <button class="show-filter-btn" onclick="toggleYearFilter()" title="Show Year Filter">
@@ -167,7 +188,7 @@
                                     </a>
                                     <a href="https://www.xiaohongshu.com/user/profile/5b32f7b311be1071312c59cc" target="_blank" class="contact-link">
                                         <i class="fas fa-book-open"></i>
-                                        <span>小红书</span>
+                                        <span>Xiaohongshu</span>
                                     </a>
                                     <a href="https://www.linkedin.com/in/hao-xu-b277231b8/" target="_blank" class="contact-link">
                                         <i class="fab fa-linkedin"></i>
@@ -185,6 +206,8 @@
             </div>
         </section>
     </main>
+
+
 
 
 
