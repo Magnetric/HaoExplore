@@ -401,20 +401,30 @@ body {
 
 /* Hero Section */
 .hero {
-    /* Direct background image setting */
-    background-image: url('../images/homephoto.webp');
-    background-size: 110%;           /* Initial zoom, prepare for animation */
-background-position: center;      /* Center the image */
-background-repeat: no-repeat;     /* No repeat tiling */
-    color: white;
-    padding: 120px 0 80px;
-    text-align: center;
-    min-height: 100vh;
+    position: relative;
+    height: 100vh;
+    height: 100svh; /* better mobile viewport fit */
+    overflow: hidden;
     display: flex;
     align-items: center;
-    position: relative;
-    overflow: hidden;
-    animation: heroZoom 20s ease-in-out infinite; /* Apply animation */
+    justify-content: center;
+}
+
+/* Background image container with zoom animation */
+.hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('../images/homephoto.webp');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover; /* 裁剪铺满，不会拉伸 */
+    transform: scale(1);
+    animation: heroZoom 20s ease-in-out infinite;
+    z-index: -2; /* 保证在最底层 */
 }
 
 /* Gradient background overlay for enhanced visual effects */
@@ -426,21 +436,38 @@ background-repeat: no-repeat;     /* No repeat tiling */
     right: 0;
     bottom: 0;
     background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-    z-index: 1;
+    z-index: -1;
 }
 
-
-
-/* Progressive zoom animation keyframes */
+/* Progressive zoom animation keyframes using transform */
 @keyframes heroZoom {
     0% {
-        background-size: 110%;
+        transform: scale(1);
     }
     50% {
-        background-size: 120%;
+        transform: scale(1.15);
     }
     100% {
-        background-size: 110%;
+        transform: scale(1);
+    }
+}
+
+@media (max-width: 768px) {
+    @keyframes heroZoomMobile {
+        0% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.5); /* 放大5% */
+        }
+        100% {
+            transform: scale(1);
+        }
+    }
+    
+    /* 手机端用新的动画 */
+    .hero-bg {
+        animation: heroZoomMobile 20s ease-in-out infinite;
     }
 }
 
@@ -450,6 +477,9 @@ background-repeat: no-repeat;     /* No repeat tiling */
     z-index: 2;
     max-width: 800px;
     margin: 0 auto;
+    text-align: center;
+    color: white;
+    padding: 0 20px;
 }
 
 .hero-title {
@@ -1015,24 +1045,23 @@ button.social-link:hover i {
 
     /* Hero Section Mobile Optimization */
     .hero {
-        padding: 100px 0 60px;
-        min-height: 90vh;
+        height: 90vh;
     }
     
     /* Mobile progressive zoom animation optimization */
-    .hero {
+    .hero::before {
         animation: heroZoomMobile 15s ease-in-out infinite;
     }
     
     @keyframes heroZoomMobile {
         0% {
-            background-size: 105%;
+            transform: scale(1);
         }
         50% {
-            background-size: 115%;
+            transform: scale(1.05);
         }
         100% {
-            background-size: 105%;
+            transform: scale(1);
         }
     }
     
@@ -1206,19 +1235,19 @@ button.social-link:hover i {
     }
     
     /* Small screen progressive zoom animation optimization */
-    .hero {
+    .hero::before {
         animation: heroZoomSmall 12s ease-in-out infinite;
     }
     
     @keyframes heroZoomSmall {
         0% {
-            background-size: 102%;
+            transform: scale(1);
         }
         50% {
-            background-size: 108%;
+            transform: scale(1.02);
         }
         100% {
-            background-size: 102%;
+            transform: scale(1);
         }
     }
     
