@@ -239,7 +239,7 @@ class PhotoGalleryApp {
         });
     }
 
-    handleSubscribeSubmit(email) {
+    async handleSubscribeSubmit(email) {
         // Validate email
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
@@ -247,20 +247,37 @@ class PhotoGalleryApp {
             return;
         }
 
-        // Here you would typically send the email to your backend
-        // For now, we'll just show a success message
-        console.log('Subscribe request for email:', email);
+        // Show loading state
+        this.showSubscribeMessage('Subscribing...', 'info');
         
-        // Simulate API call
-        setTimeout(() => {
-            this.showSubscribeMessage('Successfully subscribed! You will receive notifications when new galleries are added.', 'success');
+        try {
+            // Use separate user API endpoint for subscriptions
+            const USER_API_BASE_URL = 'https://5nuxhstp12.execute-api.eu-north-1.amazonaws.com/prod';
+            const response = await fetch(`${USER_API_BASE_URL}/subscribe`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email: email })
+            });
             
-            // Close dropdown and reset form
-            const subscribeDropdown = document.getElementById('subscribeDropdown');
-            const subscribeForm = document.getElementById('subscribeForm');
-            subscribeDropdown.classList.remove('active');
-            subscribeForm.reset();
-        }, 1000);
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.showSubscribeMessage(data.message || 'Successfully subscribed!', 'success');
+                
+                // Close dropdown and reset form
+                const subscribeDropdown = document.getElementById('subscribeDropdown');
+                const subscribeForm = document.getElementById('subscribeForm');
+                subscribeDropdown.classList.remove('active');
+                subscribeForm.reset();
+            } else {
+                this.showSubscribeMessage(data.error || 'Failed to subscribe. Please try again.', 'error');
+            }
+        } catch (error) {
+            console.error('Error subscribing:', error);
+            this.showSubscribeMessage('Network error. Please try again.', 'error');
+        }
     }
 
     showSubscribeMessage(message, type) {
@@ -308,7 +325,7 @@ class PhotoGalleryApp {
         article.setAttribute('data-index', index);
         
         // Use coverPhotoURL if available, otherwise use a placeholder
-        const coverImage = gallery.coverPhotoURL || 'images/placeholder.jpg';
+        const coverImage = gallery.coverPhotoURL || 'images/homephoto.webp';
         const location = gallery.continent;
         
         // Extract year(s) from years array
@@ -327,7 +344,7 @@ class PhotoGalleryApp {
         const photoCount = gallery.photoCount || 0;
         
         article.innerHTML = `
-            <img src="${coverImage}" alt="${gallery.name}" loading="lazy" onerror="this.src='images/placeholder.jpg'">
+            <img src="${coverImage}" alt="${gallery.name}" loading="lazy" onerror="this.src='images/homephoto.webp'">
             <div class="gallery-info">
                 <h3 class="gallery-title">${gallery.name}</h3>
                 <div class="gallery-meta">
@@ -883,7 +900,6 @@ class GalleryMap {
         
         this.markers.forEach((marker, index) => {
             const markerLatLng = marker.getLatLng();
-            console.log(`Updating marker ${index}: lat=${markerLatLng.lat}, lng=${markerLatLng.lng}`);
             
             const gallery = galleries.find(g => {
                 if (g.latitude && g.longitude) {
@@ -893,12 +909,7 @@ class GalleryMap {
                 return false;
             });
             
-            if (!gallery) {
-                console.warn(`No gallery found for marker ${index}`);
-                return;
-            }
             
-            console.log(`Found gallery: ${gallery.name}`);
             
             const badgeSize = Math.max(16, Math.round(newSize * 0.3));
             const badgeFontSize = Math.max(8, Math.round(badgeSize * 0.4));
@@ -991,18 +1002,15 @@ class GalleryMap {
         }
 
         const batch = this.markerQueue.splice(0, this.batchSize);
-        console.log(`Processing batch of ${batch.length} markers, ${this.markerQueue.length} remaining`);
 
         const promises = batch.map(async (gallery) => {
             try {
                 const coordinates = await this.getCoordinates(gallery.name, gallery.country);
                 if (coordinates) {
                     this.addMarker(gallery, coordinates);
-                    console.log(`Added marker for ${gallery.name} at ${coordinates}`);
                     this.performanceMetrics.successfulMarkers++;
                     return true;
                 } else {
-                    console.warn(`Could not find coordinates for ${gallery.name}`);
                     this.performanceMetrics.failedMarkers++;
                     return false;
                 }

@@ -2044,3 +2044,5 @@ def get_upload_urls(gallery_id, request_data):
         return create_response(500, {
             'error': f'Failed to generate upload URLs: {str(e)}'
         })
+
+
