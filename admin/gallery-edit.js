@@ -387,6 +387,13 @@ async function loadGallery() {
         updateYearsDisplay();
         updateCoverPhotoDisplay();
         
+        // Ensure photo count is accurate by updating from server data
+        if (currentGallery.photoCount !== undefined && currentGallery.photoCount !== photos.length) {
+            console.log(`Photo count mismatch: server=${currentGallery.photoCount}, local=${photos.length}, updating...`);
+            currentGallery.photoCount = photos.length;
+            updatePhotoCountDisplay();
+        }
+        
         // Clear loading message
         setTimeout(() => {
             const loadingMsg = document.querySelector('.admin-message-info');
@@ -426,12 +433,10 @@ function updateGalleryInfo() {
     const galleryName = document.getElementById('galleryName');
     const galleryLocation = document.getElementById('galleryLocation');
     const galleryDescription = document.getElementById('galleryDescription');
-    const photoCount = document.getElementById('photoCount');
     
     if (galleryName) galleryName.textContent = currentGallery.name;
     if (galleryLocation) galleryLocation.textContent = `${currentGallery.continent}, ${currentGallery.country}`;
     if (galleryDescription) galleryDescription.textContent = currentGallery.description || 'No description';
-    if (photoCount) photoCount.textContent = photos.length;
     
     // Update form fields
     const nameInput = document.getElementById('editGalleryName');
@@ -439,6 +444,81 @@ function updateGalleryInfo() {
     
     if (nameInput) nameInput.value = currentGallery.name;
     if (descInput) descInput.value = currentGallery.description || '';
+    
+    // Update photo count display
+    updatePhotoCountDisplay();
+}
+
+// Update photo count display
+function updatePhotoCountDisplay() {
+    if (!currentGallery) return;
+    
+    const photoCount = document.getElementById('photoCount');
+    if (photoCount) {
+        // Use the actual photos array length for real-time accuracy
+        photoCount.textContent = photos.length;
+        
+        // Also update the currentGallery.photoCount for consistency
+        currentGallery.photoCount = photos.length;
+        
+        // Add a small visual indicator that the count was updated
+        photoCount.classList.add('count-updated');
+        setTimeout(() => {
+            photoCount.classList.remove('count-updated');
+        }, 1000);
+    }
+}
+
+// Refresh photo count from server to ensure accuracy
+async function refreshPhotoCountFromServer() {
+    if (!currentGallery) return;
+    
+    try {
+        console.log('Refreshing photo count from server...');
+        
+        // Show loading state
+        const photoCount = document.getElementById('photoCount');
+        const refreshBtn = document.querySelector('.btn-refresh-count');
+        
+        if (photoCount) {
+            photoCount.textContent = '...';
+            photoCount.style.opacity = '0.6';
+        }
+        
+        if (refreshBtn) {
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            refreshBtn.disabled = true;
+        }
+        
+        // Reload the gallery to get the latest photo count
+        await loadGallery();
+        
+        console.log('Photo count refreshed from server');
+        
+        // Show success message
+        showMessage('Photo count refreshed successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error refreshing photo count from server:', error);
+        showMessage('Failed to refresh photo count from server', 'warning');
+        
+        // Restore original state on error
+        if (photoCount) {
+            photoCount.textContent = photos.length;
+            photoCount.style.opacity = '1';
+        }
+    } finally {
+        // Restore button state
+        if (refreshBtn) {
+            refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+            refreshBtn.disabled = false;
+        }
+        
+        // Restore photo count display
+        if (photoCount) {
+            photoCount.style.opacity = '1';
+        }
+    }
 }
 
 // Update photos grid display
@@ -777,8 +857,11 @@ async function uploadPhotos() {
         if (dbResult.success && dbResult.photos_created > 0) {
             console.log('Adding uploaded photos to current gallery...');
             
-            // Reload the gallery to get the updated photo list
+            // Reload the gallery to get the updated photo list and photo count
             await loadGallery();
+            
+            // Update the photo count display immediately
+            updatePhotoCountDisplay();
             
             showMessage(`Successfully uploaded ${dbResult.photos_created} photos!`, 'success');
         } else {
@@ -865,6 +948,10 @@ async function performDeletePhoto(photoIndex) {
     photos.splice(photoIndex, 1);
     updatePhotosGrid();
     updateGalleryInfo();
+    
+    // Update the photo count display immediately
+    updatePhotoCountDisplay();
+    
     showMessage('Photo deleted successfully', 'success');
 }
 
@@ -1314,6 +1401,8 @@ window.addYear = addYear;
 window.removeYear = removeYear;
 window.saveGalleryChanges = saveGalleryChanges;
 window.goBackToAdmin = goBackToAdmin;
+window.updatePhotoCountDisplay = updatePhotoCountDisplay;
+window.refreshPhotoCountFromServer = refreshPhotoCountFromServer;
 
 // ==================== PHOTO DRAG AND DROP FUNCTIONALITY ====================
 

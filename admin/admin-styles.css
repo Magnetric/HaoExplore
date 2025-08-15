@@ -59,6 +59,39 @@
     margin: 0 auto;
 }
 
+/* Photo Count Refresh Button */
+.btn-refresh-count {
+    background: none;
+    border: none;
+    color: #7f8c8d;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    margin-left: 8px;
+    font-size: 0.9rem;
+}
+
+.btn-refresh-count:hover {
+    color: #3498db;
+    background: rgba(52, 152, 219, 0.1);
+}
+
+.btn-refresh-count:active {
+    transform: scale(0.95);
+}
+
+/* Photo Count Update Animation */
+#photoCount.count-updated {
+    animation: countUpdate 1s ease-in-out;
+}
+
+@keyframes countUpdate {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); color: #27ae60; }
+    100% { transform: scale(1); }
+}
+
 .form-group {
     margin-bottom: 1.5rem;
 }

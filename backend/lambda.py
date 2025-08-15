@@ -893,13 +893,20 @@ def delete_photo(gallery_id: str, payload: dict):
             Key={'galleryId': str(gallery_id), 'photoId': str(item.get('photoId') or item.get('photoNumber'))}
         )
 
-        # Update gallery count
-        now_ts = datetime.utcnow().isoformat() + 'Z'
-        tbl_galleries.update_item(
-            Key={'galleryId': str(gallery_id)},
-            UpdateExpression="SET photoCount = if_not_exists(photoCount,:z) - :one, updatedAt = :now",
-            ExpressionAttributeValues={':z': 0, ':one': 1, ':now': now_ts}
-        )
+        # Update gallery photo count by recounting photos
+        try:
+            logger.info(f"Updating photo count for gallery {gallery_id} after deleting photo")
+            new_photo_count = update_gallery_photo_count(gallery_id)
+            logger.info(f"Updated photo count to {new_photo_count} after deleting photo from gallery {gallery_id}")
+        except Exception as e:
+            logger.warning(f"Failed to update photo count after deleting photo from gallery {gallery_id}: {str(e)}")
+            # Fallback to manual decrement if recount fails
+            now_ts = datetime.utcnow().isoformat() + 'Z'
+            tbl_galleries.update_item(
+                Key={'galleryId': str(gallery_id)},
+                UpdateExpression="SET photoCount = if_not_exists(photoCount,:z) - :one, updatedAt = :now",
+                ExpressionAttributeValues={':z': 0, ':one': 1, ':now': now_ts}
+            )
 
         # If the deleted photo is the cover, remove coverPhotoURL
         g = tbl_galleries.get_item(Key={'galleryId': str(gallery_id)}).get('Item') or {}
@@ -1243,6 +1250,16 @@ def process_new_uploads(request_data):
                 logger.error(error_msg)
                 errors.append(error_msg)
                 continue
+        
+        # Update the photo count in Galleries table after successful photo creation
+        if photos_created > 0:
+            try:
+                logger.info(f"Updating photo count for gallery {gallery_id} after adding {photos_created} photos")
+                new_photo_count = update_gallery_photo_count(gallery_id)
+                logger.info(f"Successfully updated photo count to {new_photo_count} for gallery {gallery_id}")
+            except Exception as e:
+                logger.warning(f"Failed to update photo count for gallery {gallery_id}: {str(e)}")
+                # Don't fail the entire operation if photo count update fails
         
         if errors:
             if photos_created == 0:
@@ -2044,5 +2061,36 @@ def get_upload_urls(gallery_id, request_data):
         return create_response(500, {
             'error': f'Failed to generate upload URLs: {str(e)}'
         })
+
+def update_gallery_photo_count(gallery_id):
+    """
+    Update the photoCount field in the Galleries table by counting photos in GalleryPhotos table
+    """
+    try:
+        from boto3.dynamodb.conditions import Key
+        
+        # Count photos for this gallery
+        photos_resp = tbl_gallery_photos.query(
+            KeyConditionExpression=Key('galleryId').eq(str(gallery_id))
+        )
+        photo_count = len(photos_resp.get('Items', []))
+        
+        # Update the Galleries table
+        now_ts = datetime.utcnow().isoformat() + 'Z'
+        tbl_galleries.update_item(
+            Key={'galleryId': str(gallery_id)},
+            UpdateExpression="SET photoCount = :pc, updatedAt = :now",
+            ExpressionAttributeValues={
+                ':pc': photo_count,
+                ':now': now_ts
+            }
+        )
+        
+        logger.info(f"Updated photoCount for gallery {gallery_id} to {photo_count}")
+        return photo_count
+        
+    except Exception as e:
+        logger.error(f"Error updating photo count for gallery {gallery_id}: {str(e)}")
+        raise e
 
 
