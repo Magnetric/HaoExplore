@@ -739,6 +739,9 @@ class GalleryMap {
         // Ensure the entire area responds to wheel events
         this.ensureFullWheelCoverage(yearFilterContainer);
         
+        // Add touch event handling for mobile
+        this.setupTouchEvents(yearFilterContainer);
+        
         console.log('Year Filter wheel events configured');
     }
     
@@ -794,6 +797,26 @@ class GalleryMap {
         observer.observe(element, {
             childList: true,
             subtree: true
+        });
+    }
+    
+    setupTouchEvents(container) {
+        // Prevent touch events from propagating to map
+        const preventTouchPropagation = (e) => {
+            e.stopPropagation();
+        };
+        
+        // Add touch event listeners to prevent map interaction
+        container.addEventListener('touchstart', preventTouchPropagation, { passive: false });
+        container.addEventListener('touchmove', preventTouchPropagation, { passive: false });
+        container.addEventListener('touchend', preventTouchPropagation, { passive: false });
+        
+        // Add touch event listeners to all child elements
+        const allChildren = container.querySelectorAll('*');
+        allChildren.forEach(child => {
+            child.addEventListener('touchstart', preventTouchPropagation, { passive: false });
+            child.addEventListener('touchmove', preventTouchPropagation, { passive: false });
+            child.addEventListener('touchend', preventTouchPropagation, { passive: false });
         });
     }
     
@@ -1328,14 +1351,47 @@ function toggleYearFilter() {
     const showFilterBtn = document.querySelector('.show-filter-btn');
     
     if (filterControl && showFilterBtn) {
-        if (filterControl.style.display === 'none') {
+        if (filterControl.style.display === 'none' || filterControl.style.display === '') {
             // Show filter
             filterControl.style.display = 'block';
             showFilterBtn.style.display = 'none';
+            
+            // Add click outside listener to close filter
+            setTimeout(() => {
+                document.addEventListener('click', closeFilterOnClickOutside);
+            }, 100);
         } else {
             // Hide filter
-            filterControl.style.display = 'none';
-            showFilterBtn.style.display = 'flex';
+            hideYearFilter();
         }
+    }
+}
+
+// Function to hide year filter
+function hideYearFilter() {
+    const filterControl = document.querySelector('.map-filter-control');
+    const showFilterBtn = document.querySelector('.show-filter-btn');
+    
+    if (filterControl) {
+        filterControl.style.display = 'none';
+    }
+    if (showFilterBtn) {
+        showFilterBtn.style.display = 'flex';
+    }
+    
+    // Remove click outside listener
+    document.removeEventListener('click', closeFilterOnClickOutside);
+}
+
+// Function to close filter when clicking outside
+function closeFilterOnClickOutside(event) {
+    const filterControl = document.querySelector('.map-filter-control');
+    const showFilterBtn = document.querySelector('.show-filter-btn');
+    
+    // Check if click is outside the filter control and not on the show filter button
+    if (filterControl && showFilterBtn && 
+        !filterControl.contains(event.target) && 
+        !showFilterBtn.contains(event.target)) {
+        hideYearFilter();
     }
 }
