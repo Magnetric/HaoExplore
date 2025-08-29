@@ -384,7 +384,32 @@ def get_gallery(gallery_id):
 
         # Ensure compatibility fields
         gallery['id'] = gallery.get('galleryId', str(gallery_id))
-        gallery['photoCount'] = len(gallery['photos'])
+        
+        # Only update photoCount if it's missing or inconsistent
+        actual_photo_count = len(gallery['photos'])
+        stored_photo_count = gallery.get('photoCount', 0)
+        
+        if stored_photo_count != actual_photo_count:
+            logger.info(f"Photo count mismatch for gallery {gallery_id}: stored={stored_photo_count}, actual={actual_photo_count}")
+            # Update the stored photo count to match actual
+            try:
+                now_ts = datetime.utcnow().isoformat() + 'Z'
+                tbl_galleries.update_item(
+                    Key={'galleryId': str(gallery_id)},
+                    UpdateExpression="SET photoCount = :pc, updatedAt = :now",
+                    ExpressionAttributeValues={
+                        ':pc': actual_photo_count,
+                        ':now': now_ts
+                    }
+                )
+                gallery['photoCount'] = actual_photo_count
+                logger.info(f"Fixed photo count mismatch for gallery {gallery_id}: {stored_photo_count} -> {actual_photo_count}")
+            except Exception as e:
+                logger.warning(f"Failed to fix photo count mismatch for gallery {gallery_id}: {str(e)}")
+                # Use the actual count for this response
+                gallery['photoCount'] = actual_photo_count
+        else:
+            logger.info(f"Photo count consistent for gallery {gallery_id}: {actual_photo_count}")
 
         # If coverPhotoURL is missing and there are photos, automatically set the first photo's thumbnail URL
         if not gallery.get('coverPhotoURL') and gallery['photos']:
@@ -696,7 +721,7 @@ def upload_photos(gallery_id, upload_data):
         if not photos_data:
             return create_response(400, {'error': 'No photos data provided'})
         
-        # Check total payload size (limit to 50MB per photo, 100MB total)
+        # Check total payload size (limit to 100MB per photo, 200MB total)
         total_size = 0
         for photo_data in photos_data:
             image_data = photo_data.get('image', '')
@@ -705,11 +730,11 @@ def upload_photos(gallery_id, upload_data):
                 estimated_size = len(image_data) * 3 // 4
                 total_size += estimated_size
                 
-                if estimated_size > 50 * 1024 * 1024:  # 50MB per photo
-                    return create_response(413, {'error': f'Photo {photo_data.get("filename", "unknown")} is too large (max 50MB)'})
+                if estimated_size > 100 * 1024 * 1024:  # 100MB per photo
+                    return create_response(413, {'error': f'Photo {photo_data.get("filename", "unknown")} is too large (max 100MB)'})
         
-        if total_size > 100 * 1024 * 1024:  # 100MB total
-            return create_response(413, {'error': 'Total upload size too large (max 100MB)'})
+        if total_size > 200 * 1024 * 1024:  # 200MB total
+            return create_response(413, {'error': 'Total upload size too large (max 200MB)'})
         
         # Get current photo count to set correct sort order
         from boto3.dynamodb.conditions import Key
@@ -808,21 +833,66 @@ def upload_photos(gallery_id, upload_data):
         if not uploaded_photos:
             return create_response(400, {'error': 'No photos were successfully uploaded'})
         
-        # Update gallery information
-        update_expr = "SET photoCount = :pc, updatedAt = :now"
-        expr_vals = {
-            ':pc': (gallery.get('photoCount') or 0) + len(uploaded_photos),
-            ':now': datetime.utcnow().isoformat() + 'Z'
-        }
+        # Update gallery information - use actual photo count from database
+        try:
+            logger.info(f"Updating photo count for gallery {gallery_id} after uploading {len(uploaded_photos)} photos")
+            logger.info(f"Current gallery photoCount: {gallery.get('photoCount')}")
+            logger.info(f"Photos uploaded in this batch: {len(uploaded_photos)}")
+            
+            new_photo_count = update_gallery_photo_count(gallery_id)
+            logger.info(f"Successfully updated photo count to {new_photo_count} for gallery {gallery_id}")
+            
+            # Verify the update was successful
+            verify_response = tbl_galleries.get_item(Key={'galleryId': str(gallery_id)})
+            if 'Item' in verify_response:
+                verified_count = verify_response['Item'].get('photoCount')
+                logger.info(f"Verified photoCount in database: {verified_count}")
+            else:
+                logger.warning(f"Could not verify photoCount update for gallery {gallery_id}")
+                
+        except Exception as e:
+            logger.warning(f"Failed to update photo count for gallery {gallery_id}: {str(e)}")
+            logger.warning(f"Using fallback method...")
+            
+            # Fallback to manual update if recount fails
+            now_ts = datetime.utcnow().isoformat() + 'Z'
+            update_expr = "SET photoCount = :pc, updatedAt = :now"
+            expr_vals = {
+                ':pc': (gallery.get('photoCount') or 0) + len(uploaded_photos),
+                ':now': now_ts
+            }
+            if not gallery.get('coverPhotoURL'):
+                update_expr += ", coverPhotoURL = :cid"
+                expr_vals[':cid'] = uploaded_photos[0]['thumbnail']
+            
+            try:
+                fallback_response = tbl_galleries.update_item(
+                    Key={'galleryId': str(gallery_id)},
+                    UpdateExpression=update_expr,
+                    ExpressionAttributeValues=expr_vals,
+                    ReturnValues='UPDATED_NEW'
+                )
+                logger.info(f"Fallback update response: {fallback_response}")
+                logger.info(f"Used fallback method to update photo count for gallery {gallery_id}")
+            except Exception as fallback_error:
+                logger.error(f"Fallback method also failed: {str(fallback_error)}")
+                raise fallback_error
+        
+        # Set cover photo if not already set
         if not gallery.get('coverPhotoURL'):
-            update_expr += ", coverPhotoURL = :cid"
-            expr_vals[':cid'] = uploaded_photos[0]['thumbnail']
-
-        tbl_galleries.update_item(
-            Key={'galleryId': str(gallery_id)},
-            UpdateExpression=update_expr,
-            ExpressionAttributeValues=expr_vals
-        )
+            try:
+                now_ts = datetime.utcnow().isoformat() + 'Z'
+                tbl_galleries.update_item(
+                    Key={'galleryId': str(gallery_id)},
+                    UpdateExpression="SET coverPhotoURL = :cid, updatedAt = :now",
+                    ExpressionAttributeValues={
+                        ':cid': uploaded_photos[0]['thumbnail'],
+                        ':now': now_ts
+                    }
+                )
+                logger.info(f"Set cover photo for gallery {gallery_id}")
+            except Exception as e:
+                logger.warning(f"Failed to set cover photo for gallery {gallery_id}: {str(e)}")
         
         return create_response(200, {
             'message': f'Successfully uploaded {len(uploaded_photos)} photos',
@@ -896,17 +966,37 @@ def delete_photo(gallery_id: str, payload: dict):
         # Update gallery photo count by recounting photos
         try:
             logger.info(f"Updating photo count for gallery {gallery_id} after deleting photo")
+            logger.info(f"Photo being deleted: {item.get('photoId') or item.get('photoNumber')}")
+            
             new_photo_count = update_gallery_photo_count(gallery_id)
             logger.info(f"Updated photo count to {new_photo_count} after deleting photo from gallery {gallery_id}")
+            
+            # Verify the update was successful
+            verify_response = tbl_galleries.get_item(Key={'galleryId': str(gallery_id)})
+            if 'Item' in verify_response:
+                verified_count = verify_response['Item'].get('photoCount')
+                logger.info(f"Verified photoCount in database after deletion: {verified_count}")
+            else:
+                logger.warning(f"Could not verify photoCount update after deletion for gallery {gallery_id}")
+                
         except Exception as e:
             logger.warning(f"Failed to update photo count after deleting photo from gallery {gallery_id}: {str(e)}")
+            logger.warning(f"Using fallback method...")
+            
             # Fallback to manual decrement if recount fails
             now_ts = datetime.utcnow().isoformat() + 'Z'
-            tbl_galleries.update_item(
-                Key={'galleryId': str(gallery_id)},
-                UpdateExpression="SET photoCount = if_not_exists(photoCount,:z) - :one, updatedAt = :now",
-                ExpressionAttributeValues={':z': 0, ':one': 1, ':now': now_ts}
-            )
+            try:
+                fallback_response = tbl_galleries.update_item(
+                    Key={'galleryId': str(gallery_id)},
+                    UpdateExpression="SET photoCount = if_not_exists(photoCount,:z) - :one, updatedAt = :now",
+                    ExpressionAttributeValues={':z': 0, ':one': 1, ':now': now_ts},
+                    ReturnValues='UPDATED_NEW'
+                )
+                logger.info(f"Fallback deletion update response: {fallback_response}")
+                logger.info(f"Used fallback method to update photo count after deletion")
+            except Exception as fallback_error:
+                logger.error(f"Fallback method also failed after deletion: {str(fallback_error)}")
+                raise fallback_error
 
         # If the deleted photo is the cover, remove coverPhotoURL
         g = tbl_galleries.get_item(Key={'galleryId': str(gallery_id)}).get('Item') or {}
@@ -2069,28 +2159,39 @@ def update_gallery_photo_count(gallery_id):
     try:
         from boto3.dynamodb.conditions import Key
         
+        logger.info(f"Starting photo count update for gallery {gallery_id}")
+        
         # Count photos for this gallery
         photos_resp = tbl_gallery_photos.query(
             KeyConditionExpression=Key('galleryId').eq(str(gallery_id))
         )
+        
+        # Log the response for debugging
+        logger.info(f"Query response for gallery {gallery_id}: {photos_resp}")
+        
         photo_count = len(photos_resp.get('Items', []))
+        logger.info(f"Counted {photo_count} photos for gallery {gallery_id}")
         
         # Update the Galleries table
         now_ts = datetime.utcnow().isoformat() + 'Z'
-        tbl_galleries.update_item(
+        update_response = tbl_galleries.update_item(
             Key={'galleryId': str(gallery_id)},
             UpdateExpression="SET photoCount = :pc, updatedAt = :now",
             ExpressionAttributeValues={
                 ':pc': photo_count,
                 ':now': now_ts
-            }
+            },
+            ReturnValues='UPDATED_NEW'
         )
         
-        logger.info(f"Updated photoCount for gallery {gallery_id} to {photo_count}")
+        logger.info(f"Update response for gallery {gallery_id}: {update_response}")
+        logger.info(f"Successfully updated photoCount for gallery {gallery_id} to {photo_count}")
         return photo_count
         
     except Exception as e:
         logger.error(f"Error updating photo count for gallery {gallery_id}: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise e
 
 

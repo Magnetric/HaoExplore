@@ -680,7 +680,7 @@ function handleFileSelect(event) {
         
         // Validate files
         const validFiles = [];
-        const maxSize = 50 * 1024 * 1024; // 50MB
+        const maxSize = 100 * 1024 * 1024; // 100MB
         const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif'];
         
         for (let file of files) {
@@ -689,7 +689,7 @@ function handleFileSelect(event) {
                 continue;
             }
             if (file.size > maxSize) {
-                showMessage(`File ${file.name} is too large (max 50MB)`, 'warning');
+                showMessage(`File ${file.name} is too large (max 100MB)`, 'warning');
                 continue;
             }
             validFiles.push(file);
@@ -735,9 +735,9 @@ async function uploadPhotos() {
         for (let i = 0; i < photosToUpload.length; i++) {
             const photo = photosToUpload[i];
             
-            // Validate file size (50MB limit)
-            if (photo.size > 50 * 1024 * 1024) {
-                showMessage(`File ${photo.name} is too large (max 50MB)`, 'error');
+            // Validate file size (100MB limit)
+            if (photo.size > 100 * 1024 * 1024) {
+                showMessage(`File ${photo.name} is too large (max 100MB)`, 'error');
                 continue;
             }
             

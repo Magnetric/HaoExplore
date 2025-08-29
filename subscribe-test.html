@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subscribe Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        input[type="email"] {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 300px;
+            margin: 10px 0;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>Subscribe Functionality Test</h1>
+    
+    <div class="test-section info">
+        <h3>API Status Check</h3>
+        <p>Testing the main galleries endpoint to verify API connectivity...</p>
+        <button onclick="testGalleriesAPI()">Test Galleries API</button>
+        <div id="galleriesResult" class="result"></div>
+    </div>
+    
+    <div class="test-section info">
+        <h3>Subscribe Endpoint Test</h3>
+        <p>Testing the subscribe endpoint...</p>
+        <button onclick="testSubscribeAPI()">Test Subscribe API</button>
+        <div id="subscribeResult" class="result"></div>
+    </div>
+    
+    <div class="test-section info">
+        <h3>Manual Subscribe Test</h3>
+        <p>Test with a real email:</p>
+        <input type="email" id="testEmail" placeholder="Enter email to test" value="test@example.com">
+        <button onclick="testManualSubscribe()">Test Subscribe</button>
+        <div id="manualResult" class="result"></div>
+    </div>
+    
+    <div class="test-section info">
+        <h3>Current Configuration</h3>
+        <p><strong>API Base URL:</strong> <span id="apiUrl"></span></p>
+        <p><strong>Subscribe Endpoint:</strong> <span id="subscribeUrl"></span></p>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'https://5nuxhstp12.execute-api.eu-north-1.amazonaws.com/prod';
+        
+        // Display current configuration
+        document.getElementById('apiUrl').textContent = API_BASE_URL;
+        document.getElementById('subscribeUrl').textContent = `${API_BASE_URL}/subscribe`;
+        
+        async function testGalleriesAPI() {
+            const resultDiv = document.getElementById('galleriesResult');
+            resultDiv.textContent = 'Testing...';
+            resultDiv.className = 'result info';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/galleries`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.textContent = `✅ SUCCESS: Galleries API working\nStatus: ${response.status}\nGalleries count: ${data.galleries ? data.galleries.length : 'N/A'}`;
+                    resultDiv.className = 'result success';
+                } else {
+                    resultDiv.textContent = `❌ ERROR: ${response.status} - ${data.error || 'Unknown error'}`;
+                    resultDiv.className = 'result error';
+                }
+            } catch (error) {
+                resultDiv.textContent = `❌ NETWORK ERROR: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        async function testSubscribeAPI() {
+            const resultDiv = document.getElementById('subscribeResult');
+            resultDiv.textContent = 'Testing...';
+            resultDiv.className = 'result info';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/subscribe`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: 'test@example.com' })
+                });
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = { error: 'Invalid JSON response' };
+                }
+                
+                if (response.ok) {
+                    resultDiv.textContent = `✅ SUCCESS: Subscribe API working\nStatus: ${response.status}\nResponse: ${JSON.stringify(data, null, 2)}`;
+                    resultDiv.className = 'result success';
+                } else {
+                    resultDiv.textContent = `❌ ERROR: ${response.status} - ${data.error || data.message || 'Unknown error'}\nResponse: ${JSON.stringify(data, null, 2)}`;
+                    resultDiv.className = 'result error';
+                }
+            } catch (error) {
+                resultDiv.textContent = `❌ NETWORK ERROR: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        async function testManualSubscribe() {
+            const email = document.getElementById('testEmail').value;
+            const resultDiv = document.getElementById('manualResult');
+            
+            if (!email) {
+                resultDiv.textContent = '❌ Please enter an email address';
+                resultDiv.className = 'result error';
+                return;
+            }
+            
+            resultDiv.textContent = 'Subscribing...';
+            resultDiv.className = 'result info';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/subscribe`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: email })
+                });
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = { error: 'Invalid JSON response' };
+                }
+                
+                if (response.ok) {
+                    resultDiv.textContent = `✅ SUCCESS: ${data.message || 'Subscribed successfully'}\nStatus: ${response.status}\nEmail: ${data.email}`;
+                    resultDiv.className = 'result success';
+                } else {
+                    resultDiv.textContent = `❌ ERROR: ${response.status} - ${data.error || data.message || 'Unknown error'}`;
+                    resultDiv.className = 'result error';
+                }
+            } catch (error) {
+                resultDiv.textContent = `❌ NETWORK ERROR: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        // Auto-run the galleries test on page load
+        window.addEventListener('load', testGalleriesAPI);
+    </script>
+</body>
+</html>

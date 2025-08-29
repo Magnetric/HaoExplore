@@ -272,11 +272,13 @@ class PhotoGalleryApp {
                 subscribeDropdown.classList.remove('active');
                 subscribeForm.reset();
             } else {
-                this.showSubscribeMessage(data.error || 'Failed to subscribe. Please try again.', 'error');
+                const errorMessage = data.error || data.message || `Server error (${response.status})`;
+                this.showSubscribeMessage(errorMessage, 'error');
+                console.error('Subscribe API error:', { status: response.status, data });
             }
         } catch (error) {
             console.error('Error subscribing:', error);
-            this.showSubscribeMessage('Network error. Please try again.', 'error');
+            this.showSubscribeMessage('Network error. Please check your connection and try again.', 'error');
         }
     }
 
