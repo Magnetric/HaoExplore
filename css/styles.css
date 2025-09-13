@@ -1513,9 +1513,8 @@ button.social-link:hover i {
 .gallery-header {
     background: white;
     border-radius: 12px;
-    padding: 2rem;
+    padding: 1rem;
     margin-top: -2rem;
-    margin-bottom: 1rem;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
     display: flex;
     justify-content: space-between;
@@ -1531,13 +1530,11 @@ button.social-link:hover i {
     font-size: 1.5rem;
     font-weight: 700;
     color: #2c3e50;
-    margin-bottom: 1rem;
 }
 
 .gallery-meta {
     display: flex;
     gap: 1.3rem;
-    margin-bottom: 1rem;
     flex-wrap: wrap;
 }
 
@@ -3024,5 +3021,291 @@ button.contact-link span {
             transform: translateY(-100%);
             opacity: 0;
         }
+    }
+}
+
+/* ==================== PANORAMA STYLES ==================== */
+
+/* Panorama Section */
+.panorama-section {
+    margin: 2rem 0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    background: white;
+}
+
+
+.panorama-container {
+    position: relative;
+    width: 100%;
+    height: 700px;
+    background: #f8f9fa;
+}
+
+.panorama-container.fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 10000;
+    background: black;
+}
+
+/* Pannellum viewer customization */
+.panorama-container .pnlm-container {
+    border-radius: 0 !important;
+}
+
+.panorama-container.fullscreen .pnlm-container {
+    border-radius: 0 !important;
+}
+
+/* Pannellum control customization */
+.panorama-container .pnlm-fullscreen-button {
+    top: 5px !important;
+    left: 5px !important;
+    bottom: auto !important;
+    right: auto !important;
+    display: block !important;
+    visibility: visible !important;
+    position: absolute !important;
+}
+
+/* Hide zoom controls but keep fullscreen button */
+.panorama-container .pnlm-zoom-controls {
+    display: none !important;
+}
+
+/* Hide individual zoom buttons */
+.panorama-container .pnlm-zoom-in,
+.panorama-container .pnlm-zoom-out {
+    display: none !important;
+}
+
+/* Hide zoom container */
+.panorama-container .pnlm-zoom-controls-container {
+    display: none !important;
+}
+
+/* Hide all zoom-related buttons with different possible class names */
+.panorama-container [class*="zoom"] {
+    display: none !important;
+}
+
+/* Hide plus and minus buttons specifically */
+.panorama-container .pnlm-plus,
+.panorama-container .pnlm-minus {
+    display: none !important;
+}
+
+/* Hide compass */
+.panorama-container .pnlm-compass {
+    display: none !important;
+}
+
+/* Hide all compass-related elements */
+.panorama-container [class*="compass"] {
+    display: none !important;
+}
+
+/* Force hide any remaining control buttons except fullscreen */
+.panorama-container .pnlm-controls > *:not(.pnlm-fullscreen-button) {
+    display: none !important;
+}
+
+/* Nuclear option: hide everything except fullscreen button */
+.panorama-container .pnlm-controls * {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+.panorama-container .pnlm-fullscreen-button {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    top: 5px !important;
+    left: 5px !important;
+    position: absolute !important;
+}
+
+/* Alternative selectors for Pannellum buttons */
+.panorama-container .pnlm-controls .pnlm-fullscreen-button {
+    top: 5px !important;
+    left: 5px !important;
+    bottom: auto !important;
+    right: auto !important;
+    display: block !important;
+    visibility: visible !important;
+    position: absolute !important;
+}
+
+/* Ensure all Pannellum control buttons are visible */
+.panorama-container .pnlm-controls {
+    display: block !important;
+    visibility: visible !important;
+}
+
+/* Make sure fullscreen button is not hidden */
+.panorama-container [class*="fullscreen"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    top: 5px !important;
+    left: 5px !important;
+    position: absolute !important;
+}
+
+/* Panorama navigation buttons */
+.panorama-nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+.panorama-nav-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.panorama-nav-prev {
+    left: 20px;
+}
+
+.panorama-nav-next {
+    right: 20px;
+}
+
+
+
+/* Panorama counter */
+.panorama-counter {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    z-index: 1000;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+/* Loading state */
+.panorama-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #666;
+}
+
+.panorama-loading i {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .panorama-section {
+        margin: 1rem 0;
+        border-radius: 8px;
+    }
+    
+    .panorama-container {
+        height: 300px;
+    }
+    
+    .panorama-nav-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+    
+    .panorama-nav-prev {
+        left: 10px;
+    }
+    
+    .panorama-nav-next {
+        right: 10px;
+    }
+    
+    .panorama-counter {
+        top: 10px;
+        right: 10px;
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+    
+    .panorama-container .pnlm-fullscreen-button,
+    .panorama-container .pnlm-controls .pnlm-fullscreen-button,
+    .panorama-container [class*="fullscreen"] {
+        top: 3px !important;
+        left: 3px !important;
+        display: block !important;
+        visibility: visible !important;
+        position: absolute !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .panorama-container {
+        height: 250px;
+    }
+    
+    .panorama-nav-btn {
+        width: 35px;
+        height: 35px;
+        font-size: 0.9rem;
+    }
+    
+    .panorama-nav-prev {
+        left: 5px;
+    }
+    
+    .panorama-nav-next {
+        right: 5px;
+    }
+    
+    .panorama-counter {
+        top: 5px;
+        right: 5px;
+        padding: 4px 8px;
+        font-size: 0.75rem;
+    }
+    
+    .panorama-container .pnlm-fullscreen-button,
+    .panorama-container .pnlm-controls .pnlm-fullscreen-button,
+    .panorama-container [class*="fullscreen"] {
+        top: 2px !important;
+        left: 2px !important;
+        display: block !important;
+        visibility: visible !important;
+        position: absolute !important;
     }
 }

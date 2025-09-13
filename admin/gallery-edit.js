@@ -129,39 +129,67 @@ let isFormModified = false; // Track form modification state
 
 // ==================== UTILITY FUNCTIONS ====================
 // Convert image to WebP format with optimized compression
-async function convertToWebP(file, quality = 0.8) {
+async function convertToWebP(file, quality = 0.8, isPanorama = false) {
     return new Promise((resolve) => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = new Image();
-        
-        img.onload = () => {
-            // Get original image dimensions
-            const w = img.naturalWidth;
-            const h = img.naturalHeight;
 
-            // Set canvas size to original dimensions
+        img.onload = () => {
+            const MAX_WIDTH = 16384;
+
+            // 原始尺寸
+            let w = img.naturalWidth;
+            let h = img.naturalHeight;
+
+            // 如果超过 WebP 最大宽度，按比例缩小
+            if (w > MAX_WIDTH) {
+                const scale = MAX_WIDTH / w;
+                w = MAX_WIDTH;
+                h = Math.round(h * scale);
+                console.log(`Image resized proportionally to: ${w}x${h}`);
+            }
+
+            // 设置 canvas 尺寸
             canvas.width = w;
             canvas.height = h;
 
-            // Enable high quality image smoothing
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
+            // 根据是否是全景决定是否平滑
+            if (isPanorama) {
+                ctx.imageSmoothingEnabled = false;
+                console.log('Image smoothing disabled to preserve panorama pixels');
+            } else {
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                console.log('Image smoothing enabled for regular processing');
+            }
 
-            // Draw the original image to canvas
+            // 绘制缩放后的图像
             ctx.drawImage(img, 0, 0, w, h);
 
-            // Convert canvas to WebP Blob
+            // 转换为 WebP Blob
             canvas.toBlob((blob) => {
-                blob.width = w;
-                blob.height = h;
-                resolve(blob);
+                if (blob) {
+                    blob.width = w;
+                    blob.height = h;
+                    console.log(`WebP conversion completed: ${w}x${h}, size: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
+                    resolve(blob);
+                } else {
+                    console.error('Failed to create WebP blob');
+                    resolve(null);
+                }
             }, 'image/webp', quality);
+        };
+
+        img.onerror = () => {
+            console.error('Failed to load image for conversion');
+            resolve(null);
         };
 
         img.src = URL.createObjectURL(file);
     });
 }
+
 
 
 // Generate thumbnail with optimized compression
@@ -386,6 +414,7 @@ async function loadGallery() {
         updatePhotosGrid();
         updateYearsDisplay();
         updateCoverPhotoDisplay();
+        initializePanoramaGrid();
         
         // Ensure photo count is accurate by updating from server data
         if (currentGallery.photoCount !== undefined && currentGallery.photoCount !== photos.length) {
@@ -629,6 +658,56 @@ function updatePhotosGrid() {
     setupPhotoDragAndDrop();
 }
 
+// Generate panorama thumbnail with compression
+async function generatePanoramaThumbnail(file, quality = 0.3) {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+
+        img.onload = () => {
+            const originalWidth = img.naturalWidth;
+            const originalHeight = img.naturalHeight;
+            
+            // Calculate thumbnail dimensions (max 400px width for thumbnails)
+            const maxThumbWidth = 400;
+            const thumbWidth = Math.min(maxThumbWidth, originalWidth);
+            const thumbHeight = Math.round((thumbWidth / originalWidth) * originalHeight);
+
+            // Set canvas size to thumbnail dimensions
+            canvas.width = thumbWidth;
+            canvas.height = thumbHeight;
+
+            // Enable image smoothing for thumbnails
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
+            // Draw the image scaled to thumbnail size
+            ctx.drawImage(img, 0, 0, thumbWidth, thumbHeight);
+
+            // Convert canvas to WebP Blob with low quality for thumbnail
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    blob.width = thumbWidth;
+                    blob.height = thumbHeight;
+                    console.log(`Panorama thumbnail generated: ${thumbWidth}x${thumbHeight}, size: ${(blob.size / 1024).toFixed(2)}KB`);
+                    resolve(blob);
+                } else {
+                    console.error('Failed to create panorama thumbnail blob');
+                    resolve(null);
+                }
+            }, 'image/webp', quality);
+        };
+
+        img.onerror = () => {
+            console.error('Failed to load image for thumbnail generation');
+            resolve(null);
+        };
+
+        img.src = URL.createObjectURL(file);
+    });
+}
+
 // ==================== PHOTO MANAGEMENT ====================
 
 // Add new photo functionality
@@ -680,7 +759,7 @@ function handleFileSelect(event) {
         
         // Validate files
         const validFiles = [];
-        const maxSize = 100 * 1024 * 1024; // 100MB
+        const maxSize = 300 * 1024 * 1024; // 300MB
         const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif'];
         
         for (let file of files) {
@@ -689,7 +768,7 @@ function handleFileSelect(event) {
                 continue;
             }
             if (file.size > maxSize) {
-                showMessage(`File ${file.name} is too large (max 100MB)`, 'warning');
+                showMessage(`File ${file.name} is too large (max 300MB)`, 'warning');
                 continue;
             }
             validFiles.push(file);
@@ -735,9 +814,9 @@ async function uploadPhotos() {
         for (let i = 0; i < photosToUpload.length; i++) {
             const photo = photosToUpload[i];
             
-            // Validate file size (100MB limit)
-            if (photo.size > 100 * 1024 * 1024) {
-                showMessage(`File ${photo.name} is too large (max 100MB)`, 'error');
+            // Validate file size (300MB limit)
+            if (photo.size > 300 * 1024 * 1024) {
+                showMessage(`File ${photo.name} is too large (max 300MB)`, 'error');
                 continue;
             }
             
@@ -1401,6 +1480,13 @@ window.addYear = addYear;
 window.removeYear = removeYear;
 window.saveGalleryChanges = saveGalleryChanges;
 window.goBackToAdmin = goBackToAdmin;
+// Panorama functions
+window.addNewPanorama = addNewPanorama;
+window.closeUploadPanoramaModal = closeUploadPanoramaModal;
+window.handlePanoramaFileSelect = handlePanoramaFileSelect;
+window.uploadPanorama = uploadPanorama;
+window.deletePanorama = deletePanorama;
+window.removePanoramaFile = removePanoramaFile;
 window.updatePhotoCountDisplay = updatePhotoCountDisplay;
 window.refreshPhotoCountFromServer = refreshPhotoCountFromServer;
 
@@ -1580,4 +1666,699 @@ async function updatePhotoSortOrder(photosData) {
         throw error;
     }
 }
+
+// ==================== PANORAMA MANAGEMENT ====================
+
+// Initialize panorama grid
+function initializePanoramaGrid() {
+    const panoramaGrid = document.getElementById('panoramaGrid');
+    if (!panoramaGrid) return;
+    
+    panoramaGrid.innerHTML = '';
+    
+    if (!currentGallery || !currentGallery.panoramaURL || currentGallery.panoramaURL.length === 0) {
+        panoramaGrid.innerHTML = `
+            <div class="panorama-empty">
+                <i class="fas fa-cube"></i>
+                <h4>No Panorama Images</h4>
+                <p>Upload 360° panorama images to enhance the gallery experience</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Display existing panoramas using thumbnails
+    currentGallery.panoramaURL.forEach((url, index) => {
+        const thumbnailUrl = currentGallery.panoThumbnail && currentGallery.panoThumbnail[index] ? currentGallery.panoThumbnail[index] : url;
+        const panoramaItem = createPanoramaItem(url, thumbnailUrl, index + 1);
+        panoramaGrid.appendChild(panoramaItem);
+    });
+    
+    // Setup drag and drop for panoramas
+    setupPanoramaDragAndDrop();
+}
+
+// ==================== PANORAMA DRAG AND DROP FUNCTIONALITY ====================
+
+function setupPanoramaDragAndDrop() {
+    const panoramaItems = document.querySelectorAll('.panorama-item-enhanced');
+    
+    if (!panoramaItems.length) return;
+    
+    // Setup drag events for each panorama item
+    panoramaItems.forEach(item => {
+        const handle = item.querySelector('.panorama-drag-handle');
+        if (handle) {
+            // Make the handle draggable
+            handle.draggable = true;
+            handle.addEventListener('dragstart', (e) => handlePanoramaDragStart(e, item));
+            handle.addEventListener('dragend', (e) => handlePanoramaDragEnd(e, item));
+        }
+        
+        // Also make the entire item draggable as backup
+        item.draggable = true;
+        item.addEventListener('dragstart', (e) => handlePanoramaDragStart(e, item));
+        item.addEventListener('dragend', (e) => handlePanoramaDragEnd(e, item));
+    });
+    
+    // Setup drop zones
+    panoramaItems.forEach(item => {
+        item.addEventListener('dragover', (e) => handlePanoramaDragOver(e, item));
+        item.addEventListener('drop', (e) => handlePanoramaDrop(e, item));
+        item.addEventListener('dragenter', (e) => handlePanoramaDragEnter(e, item));
+        item.addEventListener('dragleave', (e) => handlePanoramaDragLeave(e, item));
+    });
+    
+    console.log(`Panorama drag and drop functionality initialized for ${panoramaItems.length} items`);
+}
+
+function handlePanoramaDragStart(e, item) {
+    e.stopPropagation();
+    item.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', item.dataset.panoramaIndex);
+    
+    // Add some visual feedback
+    item.style.cursor = 'grabbing';
+    
+    console.log('Panorama drag started for index:', item.dataset.panoramaIndex);
+}
+
+function handlePanoramaDragEnd(e, item) {
+    e.stopPropagation();
+    item.classList.remove('dragging');
+    item.style.cursor = '';
+    
+    // Remove all drag-over classes from all items
+    document.querySelectorAll('.panorama-item-enhanced').forEach(el => {
+        el.classList.remove('drag-over');
+    });
+    
+    console.log('Panorama drag ended for index:', item.dataset.panoramaIndex);
+}
+
+function handlePanoramaDragOver(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function handlePanoramaDragEnter(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!item.classList.contains('dragging')) {
+        item.classList.add('drag-over');
+    }
+}
+
+function handlePanoramaDragLeave(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    item.classList.remove('drag-over');
+}
+
+function handlePanoramaDrop(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const draggedItem = document.querySelector('.dragging');
+    if (!draggedItem) {
+        console.warn('No dragged item found');
+        return;
+    }
+    
+    item.classList.remove('drag-over');
+    
+    const draggedIndex = parseInt(draggedItem.dataset.panoramaIndex);
+    const targetIndex = parseInt(item.dataset.panoramaIndex);
+    
+    if (isNaN(draggedIndex) || isNaN(targetIndex)) {
+        console.error('Invalid panorama indices:', { draggedIndex, targetIndex });
+        return;
+    }
+    
+    if (draggedIndex === targetIndex) {
+        console.log('Dropped on same position, no reorder needed');
+        return;
+    }
+    
+    console.log(`Dropping panorama ${draggedIndex} onto ${targetIndex}`);
+    
+    // Reorder panoramas
+    reorderPanoramas(draggedIndex, targetIndex);
+}
+
+function reorderPanoramas(draggedIndex, targetIndex) {
+    if (!currentGallery || !currentGallery.panoramaURL) {
+        console.error('No current gallery or panorama URLs found');
+        return;
+    }
+    
+    const panoramaURLs = [...currentGallery.panoramaURL];
+    const panoThumbnails = [...(currentGallery.panoThumbnail || [])];
+    
+    // Validate indices
+    if (draggedIndex < 0 || draggedIndex >= panoramaURLs.length || 
+        targetIndex < 0 || targetIndex >= panoramaURLs.length) {
+        console.error('Invalid panorama indices:', { draggedIndex, targetIndex, totalPanoramas: panoramaURLs.length });
+        return;
+    }
+    
+    console.log('Reordering panoramas:', {
+        draggedIndex,
+        targetIndex,
+        beforeReorder: panoramaURLs.map((url, i) => ({ index: i, url: url.split('/').pop() }))
+    });
+    
+    const draggedPanoramaURL = panoramaURLs.splice(draggedIndex, 1)[0];
+    const draggedThumbnailURL = panoThumbnails.splice(draggedIndex, 1)[0];
+    
+    panoramaURLs.splice(targetIndex, 0, draggedPanoramaURL);
+    panoThumbnails.splice(targetIndex, 0, draggedThumbnailURL);
+    
+    console.log('After reorder:', panoramaURLs.map((url, i) => ({ index: i, url: url.split('/').pop() })));
+    
+    // Update local gallery data
+    currentGallery.panoramaURL = panoramaURLs;
+    currentGallery.panoThumbnail = panoThumbnails;
+    
+    // Re-render panorama grid with new order
+    initializePanoramaGrid();
+    
+    // Update panorama order in database
+    updatePanoramaOrder(panoramaURLs, panoThumbnails);
+}
+
+async function updatePanoramaOrder(newPanoramaURLs, newPanoThumbnails) {
+    if (!currentGallery) return;
+    
+    try {
+        const updateData = {
+            id: currentGallery.id,
+            panoramaURL: newPanoramaURLs,
+            panoThumbnail: newPanoThumbnails
+        };
+        
+        await galleryAPI.updateGallery(updateData);
+        console.log('Panorama order updated successfully');
+        showMessage('Panorama order updated successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error updating panorama order:', error);
+        showMessage('Error updating panorama order: ' + error.message, 'error');
+        
+        // Revert local changes
+        initializePanoramaGrid();
+    }
+}
+
+// Create panorama item element
+function createPanoramaItem(url, thumbnailUrl, index) {
+    const item = document.createElement('div');
+    item.className = 'panorama-item-enhanced';
+    item.draggable = true;
+    item.dataset.panoramaIndex = index - 1; // Store actual index for operations
+    
+    // Extract filename from URL
+    const filename = url.split('/').pop() || `pano${index}.webp`;
+    
+    item.innerHTML = `
+        <div class="panorama-drag-handle" title="Drag to reorder">
+            <i class="fas fa-grip-vertical"></i>
+            <span class="panorama-index">${index}</span>
+        </div>
+        <img src="${thumbnailUrl}" alt="Panorama ${index}" class="panorama-preview" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDIwMCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiBmaWxsPSIjZjhmOWZhIi8+CjxwYXRoIGQ9Ik04MCA2MEgxMjBWOTBIOThaIiBmaWxsPSIjZGVlMmU2Ii8+Cjx0ZXh0IHg9IjEwMCIgeT0iODAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzZjNzU3ZCI+UGFub3JhbWEgSW1hZ2U8L3RleHQ+Cjwvc3ZnPg=='">
+        <div class="panorama-info">
+            <h4>${filename}</h4>
+        </div>
+        <div class="panorama-actions">
+            <button class="panorama-action-btn delete" onclick="deletePanorama(${index - 1})" title="Delete panorama">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `;
+    
+    return item;
+}
+
+// Handle panorama file selection
+function handlePanoramaFileSelect(event) {
+    const files = Array.from(event.target.files);
+    const uploadBtn = document.getElementById('uploadPanoramaSubmitBtn');
+    const fileListDiv = document.getElementById('panoramaFileList');
+    const fileItemsUl = document.getElementById('panoramaFileItems');
+    
+    if (files.length > 0) {
+        // Validate all files
+        const validFiles = [];
+        const errors = [];
+        
+        for (const file of files) {
+            // Validate file size (300MB limit for panoramas)
+            if (file.size > 300 * 1024 * 1024) {
+                errors.push(`${file.name} is too large (max 300MB)`);
+                continue;
+            }
+            
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                errors.push(`${file.name} is not an image file`);
+                continue;
+            }
+            
+            validFiles.push(file);
+        }
+        
+        // Show errors if any
+        if (errors.length > 0) {
+            showMessage(`Invalid files: ${errors.join(', ')}`, 'error');
+        }
+        
+        if (validFiles.length > 0) {
+            if (uploadBtn) {
+                uploadBtn.disabled = false;
+            }
+            
+            window.selectedPanoramaFiles = validFiles;
+            
+            // Display file list
+            fileItemsUl.innerHTML = '';
+            validFiles.forEach((file, index) => {
+                const li = document.createElement('li');
+                li.className = 'panorama-file-item';
+                li.innerHTML = `
+                    <div class="panorama-file-info">
+                        <div class="panorama-file-name">${file.name}</div>
+                        <div class="panorama-file-size">${(file.size / 1024 / 1024).toFixed(2)}MB</div>
+                    </div>
+                    <button class="panorama-file-remove" onclick="removePanoramaFile(${index})" title="Remove file">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                fileItemsUl.appendChild(li);
+            });
+            
+            if (fileListDiv) {
+                fileListDiv.style.display = 'block';
+            }
+            
+            console.log(`${validFiles.length} panorama files selected`);
+        } else {
+            // No valid files
+            if (uploadBtn) {
+                uploadBtn.disabled = true;
+            }
+            window.selectedPanoramaFiles = [];
+            if (fileListDiv) {
+                fileListDiv.style.display = 'none';
+            }
+        }
+    } else {
+        if (uploadBtn) {
+            uploadBtn.disabled = true;
+        }
+        window.selectedPanoramaFiles = [];
+        if (fileListDiv) {
+            fileListDiv.style.display = 'none';
+        }
+    }
+}
+
+// Remove a panorama file from selection
+function removePanoramaFile(index) {
+    if (!window.selectedPanoramaFiles || index < 0 || index >= window.selectedPanoramaFiles.length) {
+        return;
+    }
+    
+    window.selectedPanoramaFiles.splice(index, 1);
+    
+    // Refresh file list display
+    const fileItemsUl = document.getElementById('panoramaFileItems');
+    const fileListDiv = document.getElementById('panoramaFileList');
+    const uploadBtn = document.getElementById('uploadPanoramaSubmitBtn');
+    
+    if (window.selectedPanoramaFiles.length === 0) {
+        // No files left
+        if (uploadBtn) {
+            uploadBtn.disabled = true;
+        }
+        if (fileListDiv) {
+            fileListDiv.style.display = 'none';
+        }
+        // Reset file input
+        const fileInput = document.getElementById('panoramaUpload');
+        if (fileInput) {
+            fileInput.value = '';
+        }
+    } else {
+        // Update file list display
+        fileItemsUl.innerHTML = '';
+        window.selectedPanoramaFiles.forEach((file, index) => {
+            const li = document.createElement('li');
+            li.className = 'panorama-file-item';
+            li.innerHTML = `
+                <div class="panorama-file-info">
+                    <div class="panorama-file-name">${file.name}</div>
+                    <div class="panorama-file-size">${(file.size / 1024 / 1024).toFixed(2)}MB</div>
+                </div>
+                <button class="panorama-file-remove" onclick="removePanoramaFile(${index})" title="Remove file">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            fileItemsUl.appendChild(li);
+        });
+    }
+}
+
+// Upload panorama functionality
+async function uploadPanorama() {
+    const panoramaFiles = window.selectedPanoramaFiles;
+    const uploadBtn = document.getElementById('uploadPanoramaSubmitBtn');
+    const progressDiv = document.getElementById('panoramaUploadProgress');
+    const progressFill = document.getElementById('panoramaProgressFill');
+    const progressText = document.getElementById('panoramaProgressText');
+    
+    if (!panoramaFiles || panoramaFiles.length === 0) {
+        showMessage('Please select panorama files first', 'error');
+        return;
+    }
+    
+    try {
+        // Show progress
+        if (progressDiv) progressDiv.style.display = 'block';
+        if (uploadBtn) {
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+        }
+        
+        const uploadedUrls = [];
+        const totalFiles = panoramaFiles.length;
+        
+        for (let i = 0; i < panoramaFiles.length; i++) {
+            const panoramaFile = panoramaFiles[i];
+            const fileProgress = ((i + 0.1) / totalFiles) * 100;
+            
+            // Update progress
+            if (progressFill) progressFill.style.width = `${fileProgress}%`;
+            if (progressText) progressText.textContent = `Converting ${i + 1}/${totalFiles}: ${panoramaFile.name}...`;
+            
+            // Convert to WebP format and generate thumbnail
+            const webpBlob = await convertToWebP(panoramaFile, 0.9, true); // Higher quality for panoramas, preserve pixels
+            const thumbnailBlob = await generatePanoramaThumbnail(panoramaFile, 0.3); // Low quality for thumbnail
+            
+            // Update progress
+            const urlProgress = ((i + 0.3) / totalFiles) * 100;
+            if (progressFill) progressFill.style.width = `${urlProgress}%`;
+            if (progressText) progressText.textContent = `Getting upload URLs ${i + 1}/${totalFiles}...`;
+            
+            // Get next panorama number
+            const currentPanoramaCount = (currentGallery?.panoramaURL?.length || 0) + uploadedUrls.length;
+            const panoramaNumber = currentPanoramaCount + 1;
+            const filename = `pano${panoramaNumber}.webp`;
+            
+            // Get presigned URLs for panorama and thumbnail upload
+            const uploadUrls = await getPresignedUploadUrl(filename, 'panorama');
+            console.log('Got upload URLs:', uploadUrls);
+            
+            // Update progress
+            const uploadProgress = ((i + 0.5) / totalFiles) * 100;
+            if (progressFill) progressFill.style.width = `${uploadProgress}%`;
+            if (progressText) progressText.textContent = `Uploading ${i + 1}/${totalFiles}: ${panoramaFile.name}...`;
+            
+            // Upload original panorama to S3
+            const originalUploadResponse = await fetch(uploadUrls.original_url, {
+                method: 'PUT',
+                body: webpBlob,
+                headers: {
+                    'Content-Type': 'image/webp'
+                }
+            });
+            
+            if (!originalUploadResponse.ok) {
+                throw new Error(`Original upload failed for ${panoramaFile.name}: ${originalUploadResponse.status} ${originalUploadResponse.statusText}`);
+            }
+            
+            // Upload thumbnail to S3
+            console.log(`Uploading thumbnail for ${panoramaFile.name}, size: ${(thumbnailBlob.size / 1024).toFixed(2)}KB`);
+            console.log('Thumbnail upload URL:', uploadUrls.thumbnail_url);
+            
+            const thumbnailUploadResponse = await fetch(uploadUrls.thumbnail_url, {
+                method: 'PUT',
+                body: thumbnailBlob,
+                headers: {
+                    'Content-Type': 'image/webp'
+                }
+            });
+            
+            if (!thumbnailUploadResponse.ok) {
+                console.error(`Thumbnail upload failed: ${thumbnailUploadResponse.status} ${thumbnailUploadResponse.statusText}`);
+                throw new Error(`Thumbnail upload failed for ${panoramaFile.name}: ${thumbnailUploadResponse.status} ${thumbnailUploadResponse.statusText}`);
+            }
+            
+            console.log('Thumbnail uploaded successfully');
+            
+            // Get the public URLs
+            const originalPublicUrl = uploadUrls.original_url.split('?')[0];
+            const thumbnailPublicUrl = uploadUrls.thumbnail_url.split('?')[0];
+            
+            uploadedUrls.push({
+                original: originalPublicUrl,
+                thumbnail: thumbnailPublicUrl
+            });
+        }
+        
+        // Update progress
+        if (progressFill) progressFill.style.width = '95%';
+        if (progressText) progressText.textContent = 'Updating gallery...';
+        
+        // Update gallery with all new panorama URLs and thumbnails
+        await updateGalleryPanoramaData(uploadedUrls);
+        
+        // Update progress
+        if (progressFill) progressFill.style.width = '100%';
+        if (progressText) progressText.textContent = 'Complete!';
+        
+        // Refresh panorama grid
+        await loadGallery(currentGallery.id);
+        
+        const totalSize = panoramaFiles.reduce((sum, file) => sum + file.size, 0);
+        showMessage(`${totalFiles} panorama(s) uploaded successfully! (${(totalSize / 1024 / 1024).toFixed(2)}MB total)`, 'success');
+        
+        // Close modal and reset
+        closeUploadPanoramaModal();
+        
+    } catch (error) {
+        console.error('Error uploading panoramas:', error);
+        showMessage(`Error uploading panoramas: ${error.message}`, 'error');
+    } finally {
+        // Reset UI
+        if (progressDiv) progressDiv.style.display = 'none';
+        if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Upload Panoramas';
+        }
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressText) progressText.textContent = '0%';
+        
+        // Reset file input
+        const fileInput = document.getElementById('panoramaUpload');
+        if (fileInput) fileInput.value = '';
+        window.selectedPanoramaFiles = [];
+    }
+}
+
+// Update gallery with multiple panorama URLs
+async function updateGalleryPanoramaURLs(newPanoramaUrls) {
+    if (!currentGallery) {
+        throw new Error('No current gallery selected');
+    }
+    
+    const currentPanoramaURLs = currentGallery.panoramaURL || [];
+    const updatedPanoramaURLs = [...currentPanoramaURLs, ...newPanoramaUrls];
+    
+    const updateData = {
+        id: currentGallery.id,
+        panoramaURL: updatedPanoramaURLs
+    };
+    
+    await galleryAPI.updateGallery(updateData);
+    console.log('Gallery panorama URLs updated:', updatedPanoramaURLs);
+}
+
+// Update gallery with single panorama URL (kept for backward compatibility)
+async function updateGalleryPanoramaURL(newPanoramaUrl) {
+    return updateGalleryPanoramaURLs([newPanoramaUrl]);
+}
+
+// Delete panorama
+async function deletePanorama(panoramaIndex) {
+    if (!currentGallery || !currentGallery.panoramaURL) {
+        showMessage('No panorama to delete', 'error');
+        return;
+    }
+    
+    const panoramaURLs = currentGallery.panoramaURL;
+    if (panoramaIndex < 0 || panoramaIndex >= panoramaURLs.length) {
+        showMessage('Invalid panorama index', 'error');
+        return;
+    }
+    
+    const panoramaUrl = panoramaURLs[panoramaIndex];
+    const filename = panoramaUrl.split('/').pop();
+    
+    if (!confirm(`Are you sure you want to delete panorama ${panoramaIndex + 1} (${filename})?`)) {
+        return;
+    }
+    
+    try {
+        // Call API to delete panorama from both DynamoDB and S3
+        const response = await fetch(`${API_BASE_URL}/galleries?id=${currentGallery.id}&action=delete_panorama`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                panoramaIndex: panoramaIndex,
+                panoramaUrl: panoramaUrl
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to delete panorama');
+        }
+        
+        // Refresh gallery to get updated data
+        await loadGallery(currentGallery.id);
+        
+        showMessage(`Panorama ${panoramaIndex + 1} deleted successfully`, 'success');
+        
+    } catch (error) {
+        console.error('Error deleting panorama:', error);
+        showMessage(`Error deleting panorama: ${error.message}`, 'error');
+    }
+}
+
+// Modal functions
+function addNewPanorama() {
+    const modal = document.getElementById('uploadPanoramaModal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function closeUploadPanoramaModal() {
+    const modal = document.getElementById('uploadPanoramaModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    
+    // Reset form
+    const fileInput = document.getElementById('panoramaUpload');
+    if (fileInput) fileInput.value = '';
+    window.selectedPanoramaFiles = [];
+    
+    const uploadBtn = document.getElementById('uploadPanoramaSubmitBtn');
+    if (uploadBtn) uploadBtn.disabled = true;
+    
+    const progressDiv = document.getElementById('panoramaUploadProgress');
+    if (progressDiv) progressDiv.style.display = 'none';
+    
+    // Hide file list
+    const fileListDiv = document.getElementById('panoramaFileList');
+    if (fileListDiv) fileListDiv.style.display = 'none';
+}
+
+// Get presigned URL for panorama upload
+async function getPresignedUploadUrl(filename, fileType = 'panorama') {
+    const response = await fetch(`${API_BASE_URL}/galleries?id=${currentGallery.id}&action=get_upload_urls`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            photos: [{
+                filename: filename,
+                thumbnailFilename: null, // No thumbnail for panorama
+                contentType: 'image/webp'
+            }],
+            fileType: fileType // Add fileType to distinguish panorama from regular photos
+        })
+    });
+    
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to get upload URL');
+    }
+    
+    const data = await response.json();
+    
+    // For panorama, we get upload_urls array with one item containing both original and thumbnail URLs
+    if (data.upload_urls && data.upload_urls.length > 0) {
+        const uploadData = data.upload_urls[0];
+        return {
+            original_url: uploadData.original_url,
+            thumbnail_url: uploadData.thumbnail_url
+        };
+    } else {
+        throw new Error('No upload URL received');
+    }
+}
+
+// Update gallery with panorama data (both original and thumbnail URLs)
+async function updateGalleryPanoramaData(newPanoramaData) {
+    if (!currentGallery) {
+        throw new Error('No current gallery');
+    }
+    
+    // Separate original URLs and thumbnail URLs
+    const originalUrls = newPanoramaData.map(item => item.original);
+    const thumbnailUrls = newPanoramaData.map(item => item.thumbnail);
+    
+    // Append to existing arrays
+    const updatedPanoramaURLs = [...(currentGallery.panoramaURL || []), ...originalUrls];
+    const updatedPanoThumbnails = [...(currentGallery.panoThumbnail || []), ...thumbnailUrls];
+    
+    const updateData = {
+        id: currentGallery.id,
+        panoramaURL: updatedPanoramaURLs,
+        panoThumbnail: updatedPanoThumbnails
+    };
+    
+    await galleryAPI.updateGallery(updateData);
+    console.log('Gallery panorama data updated:', updateData);
+}
+
+// Test function to verify panorama drag and drop functionality
+window.testPanoramaDragDrop = function() {
+    console.log('Testing panorama drag and drop functionality...');
+    
+    const panoramaItems = document.querySelectorAll('.panorama-item-enhanced');
+    console.log(`Found ${panoramaItems.length} panorama items`);
+    
+    if (panoramaItems.length === 0) {
+        console.warn('No panorama items found. Make sure you have uploaded some panoramas first.');
+        return;
+    }
+    
+    panoramaItems.forEach((item, index) => {
+        const handle = item.querySelector('.panorama-drag-handle');
+        console.log(`Item ${index}:`, {
+            item: item,
+            handle: handle,
+            draggable: item.draggable,
+            handleDraggable: handle ? handle.draggable : 'no handle',
+            dataset: item.dataset,
+            classes: item.className
+        });
+    });
+    
+    console.log('Panorama drag and drop test completed. Try dragging the panorama items now!');
+};
+
+// Force reinitialize panorama drag and drop
+window.reinitPanoramaDragDrop = function() {
+    console.log('Reinitializing panorama drag and drop...');
+    setupPanoramaDragAndDrop();
+};
 

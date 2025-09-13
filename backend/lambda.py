@@ -106,6 +106,12 @@ def lambda_handler(event, context):
                 return get_upload_urls(gallery_id, body)
             else:
                 return create_response(400, {'error': 'Gallery ID required for getting upload URLs'})
+        elif action_param == 'delete_panorama':
+            logger.info("Routing to delete_panorama()")
+            gallery_id = query_params.get('id')
+            if not gallery_id:
+                return create_response(400, {'error': 'Gallery ID required for delete panorama'})
+            return delete_panorama(gallery_id, body)
         else:
             logger.info("Routing to create_gallery()")
             return create_gallery(body)
@@ -195,6 +201,14 @@ def create_gallery(gallery_data):
             'updatedAt': current_time
         }
         
+        # Add panorama URLs if provided
+        if 'panoramaURL' in gallery_data and gallery_data['panoramaURL']:
+            if isinstance(gallery_data['panoramaURL'], list):
+                gallery_item['panoramaURL'] = gallery_data['panoramaURL']
+            else:
+                gallery_item['panoramaURL'] = [gallery_data['panoramaURL']]
+            logger.info(f"Added panorama URLs for gallery {gallery_item['name']}: {gallery_item['panoramaURL']}")
+        
         # Add coordinates if provided
         if 'latitude' in gallery_data and 'longitude' in gallery_data:
             # Convert coordinates to Decimal for DynamoDB compatibility
@@ -239,6 +253,14 @@ def create_gallery(gallery_data):
             'createdAt': current_time,
             'updatedAt': current_time
         }
+        
+        # Add panorama URLs to response if available
+        if 'panoramaURL' in gallery_item:
+            response_gallery['panoramaURL'] = gallery_item['panoramaURL']
+        
+        # Add panorama thumbnails to response if available
+        if 'panoThumbnail' in gallery_item:
+            response_gallery['panoThumbnail'] = gallery_item['panoThumbnail']
         
         # Add coordinates to response if available
         if 'latitude' in gallery_item and 'longitude' in gallery_item:
@@ -496,6 +518,8 @@ def update_gallery(gallery_data):
         new_description = (gallery_data.get('description') if gallery_data.get('description') is not None else current.get('description', '')).strip()
         new_years = gallery_data.get('years') if gallery_data.get('years') is not None else (current.get('years') or [])
         new_cover_photo_url = gallery_data.get('coverPhotoURL')  # Support cover photo update (can be photoId or thumbnail URL)
+        new_panorama_urls = gallery_data.get('panoramaURL') if gallery_data.get('panoramaURL') is not None else (current.get('panoramaURL', []))
+        new_pano_thumbnails = gallery_data.get('panoThumbnail') if gallery_data.get('panoThumbnail') is not None else (current.get('panoThumbnail', []))
 
         # Check if any path component has changed - move S3 files if name, continent, or country changes
         path_changed = (new_name != current.get('name') or 
@@ -630,13 +654,15 @@ def update_gallery(gallery_data):
 
         # Update gallery item in DynamoDB
         try:
-            update_expr = "SET #n=:n, continent=:c, country=:co, description=:d, years=:y, updatedAt=:now"
+            update_expr = "SET #n=:n, continent=:c, country=:co, description=:d, years=:y, panoramaURL=:p, panoThumbnail=:pt, updatedAt=:now"
             expr_vals = {
                 ':n': new_name,
                 ':c': new_continent,
                 ':co': new_country,
                 ':d': new_description,
                 ':y': new_years or [],
+                ':p': new_panorama_urls,
+                ':pt': new_pano_thumbnails,
                 ':now': datetime.utcnow().isoformat() + 'Z'
             }
             expr_names = {
@@ -683,6 +709,8 @@ def update_gallery(gallery_data):
             'country': new_country,
             'description': new_description,
             'years': new_years or [],
+            'panoramaURL': new_panorama_urls,
+            'panoThumbnail': new_pano_thumbnails,
             'updatedAt': datetime.utcnow().isoformat() + 'Z',
             'movedS3': path_changed,
             's3ObjectsCopied': s3_objects_copied,
@@ -1018,6 +1046,140 @@ def delete_photo(gallery_id: str, payload: dict):
         return create_response(500, {'error': str(e)})
 
 
+def delete_panorama(gallery_id: str, payload: dict):
+    """
+    Delete a panorama from gallery and S3.
+    Accepts payload with panoramaIndex or panoramaUrl.
+    """
+    try:
+        panorama_index = payload.get('panoramaIndex')
+        panorama_url = payload.get('panoramaUrl')
+        
+        # Get gallery data
+        gallery_response = tbl_galleries.get_item(Key={'galleryId': str(gallery_id)})
+        if 'Item' not in gallery_response:
+            return create_response(404, {'error': 'Gallery not found'})
+        
+        gallery = gallery_response['Item']
+        panorama_urls = gallery.get('panoramaURL', [])
+        panorama_thumbnails = gallery.get('panoThumbnail', [])
+        
+        if not panorama_urls:
+            return create_response(404, {'error': 'No panoramas found'})
+        
+        # Find panorama to delete
+        panorama_to_delete = None
+        thumbnail_to_delete = None
+        if panorama_index is not None:
+            if panorama_index < 0 or panorama_index >= len(panorama_urls):
+                return create_response(400, {'error': 'Invalid panorama index'})
+            panorama_to_delete = panorama_urls[panorama_index]
+            if panorama_index < len(panorama_thumbnails):
+                thumbnail_to_delete = panorama_thumbnails[panorama_index]
+        elif panorama_url:
+            if panorama_url not in panorama_urls:
+                return create_response(404, {'error': 'Panorama URL not found in gallery'})
+            panorama_to_delete = panorama_url
+            # Find corresponding thumbnail
+            panorama_index = panorama_urls.index(panorama_url)
+            if panorama_index < len(panorama_thumbnails):
+                thumbnail_to_delete = panorama_thumbnails[panorama_index]
+        else:
+            return create_response(400, {'error': 'panoramaIndex or panoramaUrl required'})
+        
+        # Extract S3 key from panorama URL
+        # Panorama URL format: https://bucket.s3.region.amazonaws.com/galleries/continent/country/gallery_name/panorama/filename.webp
+        logger.info(f"Panorama URL to delete: {panorama_to_delete}")
+        
+        s3_key = None
+        
+        # Try different URL formats to extract S3 key
+        if f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/' in panorama_to_delete:
+            s3_key = panorama_to_delete.split(f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/')[1]
+        elif f'{BUCKET_NAME}.s3.' in panorama_to_delete:
+            # Handle different S3 regions
+            parts = panorama_to_delete.split(f'{BUCKET_NAME}.s3.')
+            if len(parts) > 1:
+                region_and_path = parts[1]
+                s3_key = region_and_path.split('.amazonaws.com/')[1] if '.amazonaws.com/' in region_and_path else None
+        elif panorama_to_delete.startswith('https://'):
+            # Handle direct S3 URL format
+            url_parts = panorama_to_delete.split('/')
+            if len(url_parts) >= 4 and 's3' in url_parts[2]:
+                s3_key = '/'.join(url_parts[3:])
+        
+        if s3_key:
+            logger.info(f"Extracted S3 key: {s3_key}")
+            
+            # Delete panorama from S3
+            try:
+                s3_client.delete_object(Bucket=BUCKET_NAME, Key=s3_key)
+                logger.info(f"Successfully deleted panorama from S3: {s3_key}")
+            except ClientError as e:
+                logger.error(f"Failed to delete panorama from S3: {s3_key}, error: {str(e)}")
+                # Continue with DynamoDB deletion even if S3 deletion fails
+        else:
+            logger.warning(f"Could not extract S3 key from panorama URL: {panorama_to_delete}")
+            logger.warning(f"URL format not recognized for bucket: {BUCKET_NAME}")
+        
+        # Delete thumbnail from S3 if it exists
+        if thumbnail_to_delete:
+            logger.info(f"Thumbnail URL to delete: {thumbnail_to_delete}")
+            
+            thumbnail_s3_key = None
+            # Try different URL formats to extract S3 key for thumbnail
+            if f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/' in thumbnail_to_delete:
+                thumbnail_s3_key = thumbnail_to_delete.split(f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/')[1]
+            elif f'{BUCKET_NAME}.s3.' in thumbnail_to_delete:
+                # Handle different S3 regions
+                parts = thumbnail_to_delete.split(f'{BUCKET_NAME}.s3.')
+                if len(parts) > 1:
+                    region_and_path = parts[1]
+                    thumbnail_s3_key = region_and_path.split('.amazonaws.com/')[1] if '.amazonaws.com/' in region_and_path else None
+            elif thumbnail_to_delete.startswith('https://'):
+                # Handle direct S3 URL format
+                url_parts = thumbnail_to_delete.split('/')
+                if len(url_parts) >= 4 and 's3' in url_parts[2]:
+                    thumbnail_s3_key = '/'.join(url_parts[3:])
+            
+            if thumbnail_s3_key:
+                logger.info(f"Extracted thumbnail S3 key: {thumbnail_s3_key}")
+                
+                # Delete thumbnail from S3
+                try:
+                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=thumbnail_s3_key)
+                    logger.info(f"Successfully deleted thumbnail from S3: {thumbnail_s3_key}")
+                except ClientError as e:
+                    logger.error(f"Failed to delete thumbnail from S3: {thumbnail_s3_key}, error: {str(e)}")
+                    # Continue with DynamoDB deletion even if S3 deletion fails
+            else:
+                logger.warning(f"Could not extract S3 key from thumbnail URL: {thumbnail_to_delete}")
+                logger.warning(f"Thumbnail URL format not recognized for bucket: {BUCKET_NAME}")
+        
+        # Remove from panoramaURL and panoThumbnail arrays
+        updated_panorama_urls = [url for url in panorama_urls if url != panorama_to_delete]
+        updated_panorama_thumbnails = [url for url in panorama_thumbnails if url != thumbnail_to_delete]
+        
+        # Update gallery in DynamoDB
+        now_ts = datetime.utcnow().isoformat() + 'Z'
+        tbl_galleries.update_item(
+            Key={'galleryId': str(gallery_id)},
+            UpdateExpression="SET panoramaURL = :panorama_urls, panoThumbnail = :panorama_thumbnails, updatedAt = :now",
+            ExpressionAttributeValues={
+                ':panorama_urls': updated_panorama_urls,
+                ':panorama_thumbnails': updated_panorama_thumbnails,
+                ':now': now_ts
+            }
+        )
+        
+        logger.info(f"Successfully deleted panorama from gallery {gallery_id}")
+        return create_response(200, {'message': 'Panorama deleted successfully', 'deleted': True})
+        
+    except Exception as e:
+        logger.error(f"Error deleting panorama: {str(e)}")
+        return create_response(500, {'error': 'Failed to delete panorama', 'details': str(e)})
+
+
 def format_file_size(bytes_size):
     """
     Format file size in human readable format
@@ -1050,10 +1212,11 @@ def create_response(status_code, body):
         'statusCode': status_code,
         'headers': {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',  # Configure this for your domain
+            'Access-Control-Allow-Origin': '*',  # Allow all origins including null
             'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Origin',
             'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-            'Access-Control-Max-Age': '86400'  # Cache preflight for 24 hours
+            'Access-Control-Max-Age': '86400',  # Cache preflight for 24 hours
+            'Access-Control-Allow-Credentials': 'false'
         },
         'body': json.dumps(_convert_decimals(body), ensure_ascii=False)
     }
@@ -2072,20 +2235,38 @@ def get_upload_urls(gallery_id, request_data):
             logger.error(f"Error getting gallery info: {str(e)}")
             return create_response(500, {'error': f'Failed to get gallery information: {str(e)}'})
         
-        # Validate request data
-        if 'photos' not in request_data:
-            return create_response(400, {'error': 'Missing photos array in request'})
+        # Check if this is a panorama upload
+        file_type = request_data.get('fileType', 'photo')
+        is_panorama = file_type == 'panorama'
         
-        photos_data = request_data['photos']
-        if not isinstance(photos_data, list) or len(photos_data) == 0:
-            return create_response(400, {'error': 'Photos must be a non-empty array'})
-        
-        # Validate each photo entry
-        for photo in photos_data:
+        if is_panorama:
+            # For panorama uploads, we expect a single file
+            if 'photos' not in request_data:
+                return create_response(400, {'error': 'Missing photos array in request'})
+            
+            photos_data = request_data['photos']
+            if not isinstance(photos_data, list) or len(photos_data) != 1:
+                return create_response(400, {'error': 'Panorama upload must have exactly one file'})
+            
+            # Validate panorama entry
+            photo = photos_data[0]
             if 'filename' not in photo:
-                return create_response(400, {'error': 'Each photo must have filename'})
-            if 'thumbnailFilename' not in photo:
-                return create_response(400, {'error': 'Each photo must have thumbnailFilename'})
+                return create_response(400, {'error': 'Panorama must have filename'})
+        else:
+            # Validate request data for regular photos
+            if 'photos' not in request_data:
+                return create_response(400, {'error': 'Missing photos array in request'})
+            
+            photos_data = request_data['photos']
+            if not isinstance(photos_data, list) or len(photos_data) == 0:
+                return create_response(400, {'error': 'Photos must be a non-empty array'})
+            
+            # Validate each photo entry
+            for photo in photos_data:
+                if 'filename' not in photo:
+                    return create_response(400, {'error': 'Each photo must have filename'})
+                if 'thumbnailFilename' not in photo:
+                    return create_response(400, {'error': 'Each photo must have thumbnailFilename'})
         
         # Generate presigned URLs for each photo
         upload_urls = []
@@ -2096,10 +2277,18 @@ def get_upload_urls(gallery_id, request_data):
                 photo_id = str(uuid.uuid4())
                 
                 # Create S3 keys using the correct gallery path
-                # Original: galleries/continent/country/gallery_name/filename.webp
-                # Thumbnail: galleries/continent/country/gallery_name/thumbnails/filename_thumb.webp
-                original_key = f"{gallery_path}/{photo['filename']}"
-                thumbnail_key = f"{gallery_path}/thumbnails/{photo['thumbnailFilename']}"
+                if is_panorama:
+                    # Panorama: galleries/continent/country/gallery_name/panorama/filename.webp
+                    original_key = f"{gallery_path}/panorama/{photo['filename']}"
+                    # Panorama thumbnail: galleries/continent/country/gallery_name/panorama/thumbnails/filename_thumb.webp
+                    base_name = photo['filename'].replace('.webp', '')
+                    thumbnail_filename = f"{base_name}_thumb.webp"
+                    thumbnail_key = f"{gallery_path}/panorama/thumbnails/{thumbnail_filename}"
+                else:
+                    # Original: galleries/continent/country/gallery_name/filename.webp
+                    # Thumbnail: galleries/continent/country/gallery_name/thumbnails/filename_thumb.webp
+                    original_key = f"{gallery_path}/{photo['filename']}"
+                    thumbnail_key = f"{gallery_path}/thumbnails/{photo['thumbnailFilename']}"
                 
                 # Generate presigned URLs for PUT operations
                 original_url = s3_client.generate_presigned_url(
@@ -2112,23 +2301,46 @@ def get_upload_urls(gallery_id, request_data):
                     ExpiresIn=3600  # 1 hour expiration
                 )
                 
-                thumbnail_url = s3_client.generate_presigned_url(
-                    'put_object',
-                    Params={
-                        'Bucket': BUCKET_NAME,
-                        'Key': thumbnail_key,
-                        'ContentType': photo.get('contentType', 'image/webp')
-                    },
-                    ExpiresIn=3600  # 1 hour expiration
-                )
-                
-                upload_urls.append({
-                    'photo_id': photo_id,
-                    'original_url': original_url,
-                    'thumbnail_url': thumbnail_url,
-                    'original_key': original_key,
-                    'thumbnail_key': thumbnail_key
-                })
+                if is_panorama:
+                    # For panorama, generate thumbnail presigned URL
+                    logger.info(f"Generating panorama thumbnail URL for key: {thumbnail_key}")
+                    thumbnail_url = s3_client.generate_presigned_url(
+                        'put_object',
+                        Params={
+                            'Bucket': BUCKET_NAME,
+                            'Key': thumbnail_key,
+                            'ContentType': 'image/webp'
+                        },
+                        ExpiresIn=3600  # 1 hour expiration
+                    )
+                    logger.info(f"Generated panorama thumbnail presigned URL: {thumbnail_url}")
+                    
+                    upload_urls.append({
+                        'photo_id': photo_id,
+                        'original_url': original_url,
+                        'thumbnail_url': thumbnail_url,
+                        'original_key': original_key,
+                        'thumbnail_key': thumbnail_key
+                    })
+                else:
+                    # For regular photos, generate both original and thumbnail URLs
+                    thumbnail_url = s3_client.generate_presigned_url(
+                        'put_object',
+                        Params={
+                            'Bucket': BUCKET_NAME,
+                            'Key': thumbnail_key,
+                            'ContentType': photo.get('contentType', 'image/webp')
+                        },
+                        ExpiresIn=3600  # 1 hour expiration
+                    )
+                    
+                    upload_urls.append({
+                        'photo_id': photo_id,
+                        'original_url': original_url,
+                        'thumbnail_url': thumbnail_url,
+                        'original_key': original_key,
+                        'thumbnail_key': thumbnail_key
+                    })
                 
                 logger.info(f"Generated presigned URLs for photo {photo_id}")
                 

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>360度全景图展示</title>
+    <style>
+        /* 设置全景图容器为全屏 */
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #panorama {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+</head>
+<body>
+
+    <div class="panorama-container" id="panoramaContainer" style="display: none;">
+        <div id="panoramaViewer" class="panorama-viewer"></div>
+    </div>
+
+<script src="js/gallery-script.js"></script>
+
+</body>
+</html>

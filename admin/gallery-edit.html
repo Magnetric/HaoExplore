@@ -100,6 +100,19 @@
                 <!-- Photos will be loaded here -->
             </div>
         </div>
+
+        <!-- Panorama Management Section -->
+        <div class="panorama-section">
+            <h3>
+                360° Panorama Images
+                <button class="btn-upload-panorama" onclick="addNewPanorama()" id="uploadPanoramaBtn">
+                    <i class="fas fa-plus"></i> Add Panorama
+                </button>
+            </h3>
+            <div id="panoramaGrid" class="panorama-grid">
+                <!-- Panoramas will be loaded here -->
+            </div>
+        </div>
     </main>
 
     <!-- Upload Photos Modal -->
@@ -155,6 +168,48 @@
                 <div class="modal-actions">
                     <button type="button" class="btn-undo" onclick="closeCoverPhotoModal()">Close</button>
                     <p style="color: #7f8c8d; font-size: 0.9rem; margin: 0; text-align: center;">Click on a photo above to set it as cover</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Panorama Modal -->
+    <div id="uploadPanoramaModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Upload 360° Panorama Image</h3>
+                <button class="modal-close" onclick="closeUploadPanoramaModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-info">
+                    <p><i class="fas fa-info-circle"></i> <strong>Panorama Upload Guidelines:</strong></p>
+                    <ul>
+                        <li>Maximum file size: <strong>300MB per panorama</strong></li>
+                        <li>Supported formats: JPEG, PNG, WebP, AVIF</li>
+                        <li>Images will be automatically converted to WebP format</li>
+                        <li>No thumbnails generated (full quality panorama only)</li>
+                        <li>Files will be saved as pano1.webp, pano2.webp, etc.</li>
+                        <li>Direct S3 upload using presigned URLs</li>
+                    </ul>
+                </div>
+                <div class="form-group">
+                    <label for="panoramaUpload" class="form-label">Select Panorama Images</label>
+                    <input type="file" id="panoramaUpload" class="form-control" accept="image/*" multiple onchange="handlePanoramaFileSelect(event)">
+                </div>
+                <div id="panoramaFileList" class="panorama-file-list" style="display: none;">
+                    <h4>Selected Files:</h4>
+                    <ul id="panoramaFileItems"></ul>
+                </div>
+                <button class="upload-btn" id="uploadPanoramaSubmitBtn" onclick="uploadPanorama()" disabled>
+                    <i class="fas fa-upload"></i> Upload Panorama
+                </button>
+                <div class="upload-progress" id="panoramaUploadProgress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="panoramaProgressFill"></div>
+                    </div>
+                    <div class="progress-text" id="panoramaProgressText">0%</div>
                 </div>
             </div>
         </div>

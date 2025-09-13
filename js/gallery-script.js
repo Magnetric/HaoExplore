@@ -28,6 +28,13 @@ class GalleryPageApp {
         this.currentPhotoIndex = document.getElementById('currentPhotoIndex');
         this.totalPhotos = document.getElementById('totalPhotos');
         
+        // Panorama elements
+        this.panoramaSection = document.getElementById('panoramaSection');
+        this.panoramaContainer = document.getElementById('panoramaContainer');
+        this.panoramaViewer = null;
+        this.currentPanoramaIndex = 0;
+        this.panoramaURLs = [];
+        
         this.init();
     }
 
@@ -36,6 +43,7 @@ class GalleryPageApp {
         
         this.setupNavigation();
         this.setupFullscreenViewer();
+        this.setupPanorama();
         this.initDeviceId();
         
         await this.loadGallery();
@@ -97,7 +105,8 @@ class GalleryPageApp {
                     location: `${galleryData.continent}, ${galleryData.country}`,
                     year: year,
                     photos: galleryData.photos || [],
-                    description: galleryData.description || ''
+                    description: galleryData.description || '',
+                    panoramaURL: galleryData.panoramaURL || [],
                 };
             }
         }
@@ -132,6 +141,9 @@ class GalleryPageApp {
             
             // Load photos grid
             this.loadPhotosGrid(gallery.photos);
+            
+            // Load panorama if available
+            this.loadPanorama(gallery);
             
             console.log('Gallery loaded successfully:', gallery.name, 'with', gallery.photos.length, 'photos');
         } catch (error) {
@@ -612,6 +624,220 @@ class GalleryPageApp {
         ratings[photoId] = rating;
         localStorage.setItem('photoRatings', JSON.stringify(ratings));
     }
+
+    // ==================== PANORAMA METHODS ====================
+    
+    setupPanorama() {
+        // Panorama setup - no custom controls needed since we're using Pannellum's built-in controls
+    }
+    
+    loadPanorama(gallery) {
+        console.log('Loading panorama for gallery:', gallery.name);
+        
+        // Check if gallery has panorama URLs
+        if (!gallery.panoramaURL || !Array.isArray(gallery.panoramaURL) || gallery.panoramaURL.length === 0) {
+            console.log('No panorama URLs found for gallery:', gallery.name);
+            this.panoramaSection.style.display = 'none';
+            return;
+        }
+        
+        console.log('Found panorama URLs:', gallery.panoramaURL);
+        
+        // Store panorama URLs and reset index
+        this.panoramaURLs = gallery.panoramaURL;
+        this.currentPanoramaIndex = 0;
+        
+        // Show panorama section
+        this.panoramaSection.style.display = 'block';
+        
+        // Initialize panorama viewer with first panorama URL
+        this.initializePanoramaViewer(this.panoramaURLs[0]);
+    }
+    
+    initializePanoramaViewer(panoramaUrl) {
+        console.log('Initializing panorama viewer with URL:', panoramaUrl);
+        
+        try {
+            // Destroy existing viewer if it exists
+            if (this.panoramaViewer) {
+                this.panoramaViewer.destroy();
+            }
+            
+            // Clear the container completely before initializing
+            this.panoramaContainer.innerHTML = '';
+            
+            // Create panorama navigation buttons if multiple panoramas
+            if (this.panoramaURLs.length > 1) {
+                // Panorama counter
+                const counter = document.createElement('div');
+                counter.className = 'panorama-counter';
+                counter.innerHTML = `${this.currentPanoramaIndex + 1} / ${this.panoramaURLs.length}`;
+                this.panoramaContainer.appendChild(counter);
+                
+                // Previous button
+                const prevBtn = document.createElement('button');
+                prevBtn.className = 'panorama-nav-btn panorama-nav-prev';
+                prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+                prevBtn.onclick = () => this.showPreviousPanorama();
+                this.panoramaContainer.appendChild(prevBtn);
+                
+                // Next button
+                const nextBtn = document.createElement('button');
+                nextBtn.className = 'panorama-nav-btn panorama-nav-next';
+                nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+                nextBtn.onclick = () => this.showNextPanorama();
+                this.panoramaContainer.appendChild(nextBtn);
+                
+                // Store counter reference for updates
+                this.panoramaCounter = counter;
+            }
+            
+            // Create a new div for the panorama viewer
+            const panoramaDiv = document.createElement('div');
+            panoramaDiv.id = 'panorama-viewer-' + Date.now();
+            panoramaDiv.style.width = '100%';
+            panoramaDiv.style.height = '100%';
+            this.panoramaContainer.appendChild(panoramaDiv);
+            
+            // Initialize new panorama viewer
+            this.panoramaViewer = pannellum.viewer(panoramaDiv, {
+                "type": "equirectangular",
+                "panorama": panoramaUrl,
+                "autoLoad": true,
+                "autoRotate": -2,
+                "hotSpotDebug": false,
+                "hfov": 100,
+                "mouseZoom": true,
+                "showControls": true,
+                "showFullscreenCtrl": true,
+                "showZoomCtrl": false,
+                "keyboardZoom": false,
+                "compass": false,
+                "draggable": true
+            });
+            
+            // Immediately hide unwanted buttons after initialization
+            this.hideUnwantedButtons(panoramaDiv);
+            
+            // Set up observer to hide any buttons that get added later
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'childList') {
+                        mutation.addedNodes.forEach((node) => {
+                            if (node.nodeType === Node.ELEMENT_NODE) {
+                                this.hideUnwantedButtons(panoramaDiv);
+                            }
+                        });
+                    }
+                });
+            });
+            
+            observer.observe(panoramaDiv, {
+                childList: true,
+                subtree: true
+            });
+            
+            // Add event listeners
+            this.panoramaViewer.on('load', () => {
+                console.log('Panorama loaded successfully');
+                
+                // Immediately hide unwanted buttons
+                this.hideUnwantedButtons(panoramaDiv);
+                
+                // Also hide after a short delay to catch any late-loading elements
+                setTimeout(() => {
+                    this.hideUnwantedButtons(panoramaDiv);
+                }, 100);
+                
+                // Debug check
+                setTimeout(() => {
+                    const fullscreenBtn = panoramaDiv.querySelector('.pnlm-fullscreen-button');
+                    if (fullscreenBtn) {
+                        console.log('Fullscreen button found:', fullscreenBtn);
+                    } else {
+                        console.log('Fullscreen button not found');
+                    }
+                    console.log('All Pannellum elements:', panoramaDiv.querySelectorAll('[class*="pnlm"]'));
+                }, 500);
+            });
+            
+            this.panoramaViewer.on('error', (error) => {
+                console.error('Panorama loading error:', error);
+                this.panoramaContainer.innerHTML = `
+                    <div class="panorama-loading">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Failed to load panorama: ${error}</p>
+                    </div>
+                `;
+            });
+            
+            console.log('Panorama viewer initialized successfully');
+            
+        } catch (error) {
+            console.error('Error initializing panorama viewer:', error);
+            this.panoramaContainer.innerHTML = `
+                <div class="panorama-loading">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Failed to load panorama</p>
+                </div>
+            `;
+        }
+    }
+    
+    showPreviousPanorama() {
+        if (this.panoramaURLs.length <= 1) return;
+        
+        this.currentPanoramaIndex = (this.currentPanoramaIndex - 1 + this.panoramaURLs.length) % this.panoramaURLs.length;
+        this.updatePanoramaCounter();
+        this.initializePanoramaViewer(this.panoramaURLs[this.currentPanoramaIndex]);
+    }
+    
+    showNextPanorama() {
+        if (this.panoramaURLs.length <= 1) return;
+        
+        this.currentPanoramaIndex = (this.currentPanoramaIndex + 1) % this.panoramaURLs.length;
+        this.updatePanoramaCounter();
+        this.initializePanoramaViewer(this.panoramaURLs[this.currentPanoramaIndex]);
+    }
+    
+    updatePanoramaCounter() {
+        if (this.panoramaCounter && this.panoramaURLs.length > 1) {
+            this.panoramaCounter.innerHTML = `${this.currentPanoramaIndex + 1} / ${this.panoramaURLs.length}`;
+        }
+    }
+    
+    hideUnwantedButtons(panoramaDiv) {
+        // Force hide all unwanted buttons
+        const unwantedSelectors = [
+            '[class*="zoom"]',
+            '.pnlm-plus',
+            '.pnlm-minus',
+            '[class*="compass"]',
+            '.pnlm-compass',
+            '.pnlm-zoom-controls',
+            '.pnlm-zoom-in',
+            '.pnlm-zoom-out'
+        ];
+        
+        unwantedSelectors.forEach(selector => {
+            const elements = panoramaDiv.querySelectorAll(selector);
+            elements.forEach(el => {
+                el.style.display = 'none';
+                el.style.visibility = 'hidden';
+                el.style.opacity = '0';
+            });
+        });
+        
+        // Hide all control buttons except fullscreen
+        const allControls = panoramaDiv.querySelectorAll('.pnlm-controls > *');
+        allControls.forEach(control => {
+            if (!control.classList.contains('pnlm-fullscreen-button')) {
+                control.style.display = 'none';
+                control.style.visibility = 'hidden';
+            }
+        });
+    }
+    
 }
 
 // Initialize application when DOM is loaded
@@ -625,3 +851,5 @@ window.openFullscreenViewer = (index) => galleryApp.openFullscreenViewer(index);
 window.closeFullscreenViewer = () => galleryApp.closeFullscreenViewer();
 window.showPreviousPhoto = () => galleryApp.showPreviousPhoto();
 window.showNextPhoto = () => galleryApp.showNextPhoto(); 
+window.showPreviousPanorama = () => galleryApp.showPreviousPanorama();
+window.showNextPanorama = () => galleryApp.showNextPanorama(); 
