@@ -709,7 +709,7 @@ class GalleryPageApp {
                 "hfov": 100,
                 "mouseZoom": true,
                 "showControls": true,
-                "showFullscreenCtrl": true,
+                "showFullscreenCtrl": false, // We'll handle fullscreen ourselves
                 "showZoomCtrl": false,
                 "keyboardZoom": false,
                 "compass": false,
@@ -718,6 +718,9 @@ class GalleryPageApp {
             
             // Immediately hide unwanted buttons after initialization
             this.hideUnwantedButtons(panoramaDiv);
+            
+            // Add custom fullscreen button for mobile landscape support
+            this.addCustomFullscreenButton(panoramaDiv);
             
             // Set up observer to hide any buttons that get added later
             const observer = new MutationObserver((mutations) => {
@@ -828,14 +831,186 @@ class GalleryPageApp {
             });
         });
         
-        // Hide all control buttons except fullscreen
+        // Hide all control buttons
         const allControls = panoramaDiv.querySelectorAll('.pnlm-controls > *');
         allControls.forEach(control => {
-            if (!control.classList.contains('pnlm-fullscreen-button')) {
-                control.style.display = 'none';
-                control.style.visibility = 'hidden';
-            }
+            control.style.display = 'none';
+            control.style.visibility = 'hidden';
         });
+    }
+    
+    addCustomFullscreenButton(panoramaDiv) {
+        // Create custom fullscreen button
+        const fullscreenBtn = document.createElement('button');
+        fullscreenBtn.className = 'custom-fullscreen-btn';
+        fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
+        fullscreenBtn.title = 'Fullscreen';
+        fullscreenBtn.style.cssText = `
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        `;
+        
+        fullscreenBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.togglePanoramaFullscreen();
+        });
+        
+        panoramaDiv.appendChild(fullscreenBtn);
+    }
+    
+    togglePanoramaFullscreen() {
+        if (!this.panoramaContainer) return;
+        
+        const isCurrentlyFullscreen = this.panoramaContainer.classList.contains('fullscreen');
+        
+        if (isCurrentlyFullscreen) {
+            this.exitPanoramaFullscreen();
+        } else {
+            this.enterPanoramaFullscreen();
+        }
+    }
+    
+    enterPanoramaFullscreen() {
+        if (!this.panoramaContainer) return;
+        
+        console.log('Entering panorama fullscreen');
+        
+        // Add fullscreen class
+        this.panoramaContainer.classList.add('fullscreen');
+        document.body.classList.add('panorama-fullscreen-active');
+        document.body.style.overflow = 'hidden';
+        
+        // Hide header
+        const header = document.querySelector('.header');
+        if (header) {
+            header.style.display = 'none';
+        }
+        
+        // Force landscape orientation on mobile
+        if (this.isMobile()) {
+            this.requestLandscapeOrientation();
+            // Add force-landscape class for CSS rotation
+            this.panoramaContainer.classList.add('force-landscape');
+        }
+        
+        // Resize panorama viewer
+        setTimeout(() => {
+            if (this.panoramaViewer && this.panoramaViewer.resize) {
+                this.panoramaViewer.resize();
+            }
+        }, 100);
+        
+        // Update fullscreen button icon
+        const fullscreenBtn = this.panoramaContainer.querySelector('.custom-fullscreen-btn');
+        if (fullscreenBtn) {
+            fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
+            fullscreenBtn.title = 'Exit Fullscreen';
+        }
+        
+        // Add keyboard listener for ESC key
+        this.fullscreenKeyHandler = (e) => {
+            if (e.key === 'Escape') {
+                this.exitPanoramaFullscreen();
+            }
+        };
+        document.addEventListener('keydown', this.fullscreenKeyHandler);
+    }
+    
+    exitPanoramaFullscreen() {
+        if (!this.panoramaContainer) return;
+        
+        console.log('Exiting panorama fullscreen');
+        
+        // Remove fullscreen class
+        this.panoramaContainer.classList.remove('fullscreen');
+        document.body.classList.remove('panorama-fullscreen-active');
+        document.body.style.overflow = 'auto';
+        
+        // Show header
+        const header = document.querySelector('.header');
+        if (header) {
+            header.style.display = 'block';
+        }
+        
+        // Reset orientation on mobile
+        if (this.isMobile()) {
+            this.resetOrientation();
+            // Remove force-landscape class
+            this.panoramaContainer.classList.remove('force-landscape');
+        }
+        
+        // Resize panorama viewer
+        setTimeout(() => {
+            if (this.panoramaViewer && this.panoramaViewer.resize) {
+                this.panoramaViewer.resize();
+            }
+        }, 100);
+        
+        // Update fullscreen button icon
+        const fullscreenBtn = this.panoramaContainer.querySelector('.custom-fullscreen-btn');
+        if (fullscreenBtn) {
+            fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
+            fullscreenBtn.title = 'Fullscreen';
+        }
+        
+        // Remove keyboard listener
+        if (this.fullscreenKeyHandler) {
+            document.removeEventListener('keydown', this.fullscreenKeyHandler);
+            this.fullscreenKeyHandler = null;
+        }
+    }
+    
+    isMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+               window.innerWidth <= 768 || ('ontouchstart' in window);
+    }
+    
+    requestLandscapeOrientation() {
+        // Try to lock orientation to landscape on mobile
+        if (screen && screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').catch(err => {
+                console.log('Could not lock orientation:', err);
+            });
+        }
+        
+        // Alternative method for older browsers
+        if (screen && screen.lockOrientation) {
+            try {
+                screen.lockOrientation('landscape');
+            } catch (e) {
+                console.log('Could not lock orientation (legacy):', e);
+            }
+        }
+    }
+    
+    resetOrientation() {
+        // Unlock orientation
+        if (screen && screen.orientation && screen.orientation.unlock) {
+            screen.orientation.unlock();
+        }
+        
+        // Alternative method for older browsers
+        if (screen && screen.unlockOrientation) {
+            try {
+                screen.unlockOrientation();
+            } catch (e) {
+                console.log('Could not unlock orientation (legacy):', e);
+            }
+        }
     }
     
 }
@@ -852,4 +1027,21 @@ window.closeFullscreenViewer = () => galleryApp.closeFullscreenViewer();
 window.showPreviousPhoto = () => galleryApp.showPreviousPhoto();
 window.showNextPhoto = () => galleryApp.showNextPhoto(); 
 window.showPreviousPanorama = () => galleryApp.showPreviousPanorama();
-window.showNextPanorama = () => galleryApp.showNextPanorama(); 
+window.showNextPanorama = () => galleryApp.showNextPanorama();
+
+// Test functions for panorama fullscreen
+window.testPanoramaFullscreen = () => {
+    if (galleryApp && galleryApp.panoramaContainer) {
+        console.log('Testing panorama fullscreen...');
+        galleryApp.togglePanoramaFullscreen();
+    } else {
+        console.log('No panorama container found. Make sure a panorama is loaded.');
+    }
+};
+
+window.forcePanoramaLandscape = () => {
+    if (galleryApp && galleryApp.panoramaContainer) {
+        console.log('Forcing panorama landscape mode...');
+        galleryApp.requestLandscapeOrientation();
+    }
+}; 

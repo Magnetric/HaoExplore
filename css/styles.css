@@ -3053,6 +3053,64 @@ button.contact-link span {
     background: black;
 }
 
+/* Mobile landscape fullscreen support */
+.panorama-fullscreen-active {
+    overflow: hidden !important;
+}
+
+/* Mobile landscape fullscreen - force landscape orientation */
+@media screen and (max-width: 768px) {
+    .panorama-container.fullscreen.force-landscape {
+        width: 100vh;
+        height: 100vw;
+        transform: rotate(90deg);
+        transform-origin: center center;
+        left: 50%;
+        top: 50%;
+        margin-left: -50vh;
+        margin-top: -50vw;
+    }
+    
+    .panorama-container.fullscreen.force-landscape .pnlm-container {
+        width: 100% !important;
+        height: 100% !important;
+    }
+    
+    .panorama-container.fullscreen.force-landscape .custom-fullscreen-btn {
+        transform: rotate(-90deg);
+        transform-origin: center center;
+    }
+}
+
+/* Custom fullscreen button styles */
+.custom-fullscreen-btn {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.7);
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+.custom-fullscreen-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(1.1);
+}
+
+.custom-fullscreen-btn:active {
+    transform: scale(0.95);
+}
+
 /* Pannellum viewer customization */
 .panorama-container .pnlm-container {
     border-radius: 0 !important;
@@ -3262,14 +3320,12 @@ button.contact-link span {
         font-size: 0.8rem;
     }
     
-    .panorama-container .pnlm-fullscreen-button,
-    .panorama-container .pnlm-controls .pnlm-fullscreen-button,
-    .panorama-container [class*="fullscreen"] {
-        top: 3px !important;
-        left: 3px !important;
-        display: block !important;
-        visibility: visible !important;
-        position: absolute !important;
+    .custom-fullscreen-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 14px;
+        top: 3px;
+        left: 3px;
     }
 }
 
@@ -3299,13 +3355,11 @@ button.contact-link span {
         font-size: 0.75rem;
     }
     
-    .panorama-container .pnlm-fullscreen-button,
-    .panorama-container .pnlm-controls .pnlm-fullscreen-button,
-    .panorama-container [class*="fullscreen"] {
-        top: 2px !important;
-        left: 2px !important;
-        display: block !important;
-        visibility: visible !important;
-        position: absolute !important;
+    .custom-fullscreen-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 12px;
+        top: 2px;
+        left: 2px;
     }
 }
