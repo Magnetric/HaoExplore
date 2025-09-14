@@ -672,6 +672,19 @@ class GalleryPageApp {
                 const counter = document.createElement('div');
                 counter.className = 'panorama-counter';
                 counter.innerHTML = `${this.currentPanoramaIndex + 1} / ${this.panoramaURLs.length}`;
+                counter.style.cssText = `
+                    position: absolute;
+                    bottom: 5px;
+                    right: 5px;
+                    z-index: 1000;
+                    background: rgba(0, 0, 0, 0.7);
+                    color: white;
+                    padding: 6px 12px;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    pointer-events: none;
+                `;
                 this.panoramaContainer.appendChild(counter);
                 
                 // Previous button
@@ -708,8 +721,8 @@ class GalleryPageApp {
                 "hotSpotDebug": false,
                 "hfov": 100,
                 "mouseZoom": true,
-                "showControls": true,
-                "showFullscreenCtrl": false, // We'll handle fullscreen ourselves
+                "showControls": false, // Disable all built-in controls
+                "showFullscreenCtrl": false, // Disable built-in fullscreen button
                 "showZoomCtrl": false,
                 "keyboardZoom": false,
                 "compass": false,
@@ -810,7 +823,7 @@ class GalleryPageApp {
     }
     
     hideUnwantedButtons(panoramaDiv) {
-        // Force hide all unwanted buttons
+        // Force hide all Pannellum built-in controls including fullscreen button
         const unwantedSelectors = [
             '[class*="zoom"]',
             '.pnlm-plus',
@@ -819,23 +832,38 @@ class GalleryPageApp {
             '.pnlm-compass',
             '.pnlm-zoom-controls',
             '.pnlm-zoom-in',
-            '.pnlm-zoom-out'
+            '.pnlm-zoom-out',
+            '.pnlm-fullscreen-button', // Hide built-in fullscreen button
+            '.pnlm-controls' // Hide entire controls container
         ];
         
         unwantedSelectors.forEach(selector => {
             const elements = panoramaDiv.querySelectorAll(selector);
             elements.forEach(el => {
-                el.style.display = 'none';
-                el.style.visibility = 'hidden';
-                el.style.opacity = '0';
+                el.style.display = 'none !important';
+                el.style.visibility = 'hidden !important';
+                el.style.opacity = '0 !important';
             });
         });
         
-        // Hide all control buttons
-        const allControls = panoramaDiv.querySelectorAll('.pnlm-controls > *');
+        // Hide all control buttons and containers
+        const allControls = panoramaDiv.querySelectorAll('.pnlm-controls, .pnlm-controls > *');
         allControls.forEach(control => {
-            control.style.display = 'none';
-            control.style.visibility = 'hidden';
+            control.style.display = 'none !important';
+            control.style.visibility = 'hidden !important';
+            control.style.opacity = '0 !important';
+        });
+        
+        // Additional cleanup for any remaining Pannellum elements
+        const allPannellumElements = panoramaDiv.querySelectorAll('[class*="pnlm"]');
+        allPannellumElements.forEach(el => {
+            if (el.classList.contains('pnlm-container') || el.classList.contains('pnlm-canvas')) {
+                // Keep the main container and canvas
+                return;
+            }
+            el.style.display = 'none !important';
+            el.style.visibility = 'hidden !important';
+            el.style.opacity = '0 !important';
         });
     }
     
@@ -848,7 +876,7 @@ class GalleryPageApp {
         fullscreenBtn.style.cssText = `
             position: absolute;
             top: 5px;
-            left: 5px;
+            right: 5px;
             z-index: 1000;
             background: rgba(0, 0, 0, 0.7);
             border: none;
@@ -900,12 +928,7 @@ class GalleryPageApp {
             header.style.display = 'none';
         }
         
-        // Force landscape orientation on mobile
-        if (this.isMobile()) {
-            this.requestLandscapeOrientation();
-            // Add force-landscape class for CSS rotation
-            this.panoramaContainer.classList.add('force-landscape');
-        }
+        // Keep original orientation - no forced landscape
         
         // Resize panorama viewer
         setTimeout(() => {
@@ -946,12 +969,7 @@ class GalleryPageApp {
             header.style.display = 'block';
         }
         
-        // Reset orientation on mobile
-        if (this.isMobile()) {
-            this.resetOrientation();
-            // Remove force-landscape class
-            this.panoramaContainer.classList.remove('force-landscape');
-        }
+        // No orientation reset needed
         
         // Resize panorama viewer
         setTimeout(() => {
@@ -979,39 +997,7 @@ class GalleryPageApp {
                window.innerWidth <= 768 || ('ontouchstart' in window);
     }
     
-    requestLandscapeOrientation() {
-        // Try to lock orientation to landscape on mobile
-        if (screen && screen.orientation && screen.orientation.lock) {
-            screen.orientation.lock('landscape').catch(err => {
-                console.log('Could not lock orientation:', err);
-            });
-        }
-        
-        // Alternative method for older browsers
-        if (screen && screen.lockOrientation) {
-            try {
-                screen.lockOrientation('landscape');
-            } catch (e) {
-                console.log('Could not lock orientation (legacy):', e);
-            }
-        }
-    }
-    
-    resetOrientation() {
-        // Unlock orientation
-        if (screen && screen.orientation && screen.orientation.unlock) {
-            screen.orientation.unlock();
-        }
-        
-        // Alternative method for older browsers
-        if (screen && screen.unlockOrientation) {
-            try {
-                screen.unlockOrientation();
-            } catch (e) {
-                console.log('Could not unlock orientation (legacy):', e);
-            }
-        }
-    }
+    // Orientation methods removed - keeping original orientation
     
 }
 
@@ -1039,9 +1025,4 @@ window.testPanoramaFullscreen = () => {
     }
 };
 
-window.forcePanoramaLandscape = () => {
-    if (galleryApp && galleryApp.panoramaContainer) {
-        console.log('Forcing panorama landscape mode...');
-        galleryApp.requestLandscapeOrientation();
-    }
-}; 
+// Landscape forcing function removed - keeping original orientation 
