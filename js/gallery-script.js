@@ -777,17 +777,26 @@ class GalleryPageApp {
         };
         document.addEventListener('keydown', this.fullscreenKeyHandler);
 
+        this.onFullscreenChange = () => {
+            const active = document.fullscreenElement || document.webkitFullscreenElement;
+            if (!active) this.exitPanoramaFullscreen();
+        };
+        document.addEventListener('fullscreenchange', this.onFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', this.onFullscreenChange);
+
         this.orientationChangeHandler = () => this.applyLandscapeLayout();
         window.addEventListener('orientationchange', this.orientationChangeHandler);
         window.addEventListener('resize', this.orientationChangeHandler);
     }
 
     exitPanoramaFullscreen() {
-        if (!this.panoramaContainer) return;
+        if (!this.panoramaContainer || this._exitingPanorama) return;
+        this._exitingPanorama = true;
 
+        this.clearForceLandscape();
         this.unlockLandscapeOrientation();
 
-        this.panoramaContainer.classList.remove('fullscreen', 'force-landscape');
+        this.panoramaContainer.classList.remove('fullscreen');
         document.body.classList.remove('panorama-fullscreen-active');
         document.body.style.overflow = 'auto';
 
@@ -808,38 +817,57 @@ class GalleryPageApp {
             document.removeEventListener('keydown', this.fullscreenKeyHandler);
             this.fullscreenKeyHandler = null;
         }
+        if (this.onFullscreenChange) {
+            document.removeEventListener('fullscreenchange', this.onFullscreenChange);
+            document.removeEventListener('webkitfullscreenchange', this.onFullscreenChange);
+            this.onFullscreenChange = null;
+        }
         if (this.orientationChangeHandler) {
             window.removeEventListener('orientationchange', this.orientationChangeHandler);
             window.removeEventListener('resize', this.orientationChangeHandler);
             this.orientationChangeHandler = null;
         }
+
+        this._exitingPanorama = false;
     }
 
-    isMobile() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-               window.innerWidth <= 768 || ('ontouchstart' in window);
+    isPhone() {
+        const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+        return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+            (coarse && navigator.maxTouchPoints > 1);
     }
 
     isPortrait() {
-        return window.innerHeight > window.innerWidth;
+        const { width, height } = this.getViewportSize();
+        return height > width;
+    }
+
+    getViewportSize() {
+        const vv = window.visualViewport;
+        return {
+            width: Math.round((vv && vv.width) || window.innerWidth),
+            height: Math.round((vv && vv.height) || window.innerHeight)
+        };
     }
 
     async lockLandscapeOrientation() {
-        // Prefer native fullscreen + orientation lock (Android Chrome, etc.)
-        try {
-            const el = this.panoramaContainer;
-            if (el.requestFullscreen) {
-                await el.requestFullscreen();
-            } else if (el.webkitRequestFullscreen) {
-                await el.webkitRequestFullscreen();
+        const el = this.panoramaContainer;
+        const requestFs = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (requestFs) {
+            const pending = requestFs.call(el);
+            if (pending && pending.then) {
+                await pending.catch(() => {});
             }
-        } catch (_) { /* ignore */ }
+        }
 
-        try {
-            if (screen.orientation && screen.orientation.lock) {
-                await screen.orientation.lock('landscape');
-            }
-        } catch (_) { /* ignore — common on iOS */ }
+        this.orientationLockFailed = true;
+        if (this.isPhone() && screen.orientation && screen.orientation.lock) {
+            await screen.orientation.lock('landscape').then(() => {
+                this.orientationLockFailed = false;
+            }).catch(() => {});
+        } else if (!this.isPhone()) {
+            this.orientationLockFailed = false;
+        }
 
         this.applyLandscapeLayout();
     }
@@ -849,14 +877,14 @@ class GalleryPageApp {
             if (screen.orientation && screen.orientation.unlock) {
                 screen.orientation.unlock();
             }
-        } catch (_) { /* ignore */ }
+        } catch (_) { /* already unlocked */ }
 
-        try {
-            if (document.fullscreenElement || document.webkitFullscreenElement) {
-                const exit = document.exitFullscreen || document.webkitExitFullscreen;
-                if (exit) exit.call(document);
-            }
-        } catch (_) { /* ignore */ }
+        const active = document.fullscreenElement || document.webkitFullscreenElement;
+        if (!active) return;
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (!exit) return;
+        const pending = exit.call(document);
+        if (pending && pending.catch) pending.catch(() => {});
     }
 
     applyLandscapeLayout() {
@@ -864,14 +892,117 @@ class GalleryPageApp {
             return;
         }
 
-        // CSS rotate fallback when device is still portrait (iOS / lock unsupported)
-        if (this.isMobile() && this.isPortrait()) {
-            this.panoramaContainer.classList.add('force-landscape');
+        // Real landscape lock worked, or the phone is already sideways.
+        if (!this.isPhone() || !this.orientationLockFailed || !this.isPortrait()) {
+            this.clearForceLandscape();
         } else {
-            this.panoramaContainer.classList.remove('force-landscape');
+            this.enableForceLandscape();
         }
 
         this.resizePanoramaViewer();
+    }
+
+    enableForceLandscape() {
+        const el = this.panoramaContainer;
+        const { width, height } = this.getViewportSize();
+        el.classList.add('force-landscape');
+        el.style.top = '0px';
+        el.style.left = width + 'px';
+        el.style.width = height + 'px';
+        el.style.height = width + 'px';
+        el.style.transformOrigin = 'top left';
+        el.style.transform = 'rotate(90deg)';
+        this.bindLandscapePointerFix();
+    }
+
+    clearForceLandscape() {
+        const el = this.panoramaContainer;
+        if (!el) return;
+        el.classList.remove('force-landscape');
+        el.style.top = '';
+        el.style.left = '';
+        el.style.width = '';
+        el.style.height = '';
+        el.style.transform = '';
+        el.style.transformOrigin = '';
+        this.unbindLandscapePointerFix();
+    }
+
+    bindLandscapePointerFix() {
+        if (this._landscapePointerFix) return;
+        this._landscapePointerFix = (event) => this.remapLandscapePointer(event);
+        const types = ['mousedown', 'mousemove', 'mouseup', 'touchstart', 'touchmove', 'touchend', 'touchcancel'];
+        types.forEach(type => {
+            this.panoramaContainer.addEventListener(type, this._landscapePointerFix, { capture: true, passive: false });
+        });
+    }
+
+    unbindLandscapePointerFix() {
+        if (!this._landscapePointerFix || !this.panoramaContainer) return;
+        const types = ['mousedown', 'mousemove', 'mouseup', 'touchstart', 'touchmove', 'touchend', 'touchcancel'];
+        types.forEach(type => {
+            this.panoramaContainer.removeEventListener(type, this._landscapePointerFix, { capture: true });
+        });
+        this._landscapePointerFix = null;
+    }
+
+    remapLandscapePointer(event) {
+        if (!this.panoramaContainer.classList.contains('force-landscape') || event.__remapped) return;
+        const target = event.target;
+        if (!target || !target.closest || target.closest('button')) return;
+        if (!target.closest('.pnlm-container') && !target.closest('.pnlm-dragfix')) return;
+
+        try {
+            const rect = this.panoramaContainer.getBoundingClientRect();
+            const mapPoint = (x, y) => ({
+                x: rect.left + (y - rect.top),
+                y: rect.top + (rect.right - x)
+            });
+
+            let fake;
+            if (typeof Touch !== 'undefined' && (event.touches || event.changedTouches)) {
+                const toTouches = (list) => Array.from(list || []).map(t => {
+                    const p = mapPoint(t.clientX, t.clientY);
+                    return new Touch({
+                        identifier: t.identifier,
+                        target: t.target,
+                        clientX: p.x,
+                        clientY: p.y,
+                        pageX: p.x,
+                        pageY: p.y,
+                        screenX: p.x,
+                        screenY: p.y
+                    });
+                });
+                fake = new TouchEvent(event.type, {
+                    bubbles: true,
+                    cancelable: true,
+                    touches: toTouches(event.touches),
+                    targetTouches: toTouches(event.targetTouches),
+                    changedTouches: toTouches(event.changedTouches)
+                });
+            } else {
+                const p = mapPoint(event.clientX, event.clientY);
+                fake = new MouseEvent(event.type, {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: p.x,
+                    clientY: p.y,
+                    screenX: p.x,
+                    screenY: p.y,
+                    button: event.button,
+                    buttons: event.buttons
+                });
+            }
+
+            fake.__remapped = true;
+            event.stopImmediatePropagation();
+            if (event.cancelable) event.preventDefault();
+            target.dispatchEvent(fake);
+        } catch (_) {
+            // Keep the original event if this browser cannot rebuild touches.
+        }
     }
 
     resizePanoramaViewer() {

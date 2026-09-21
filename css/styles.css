@@ -3066,16 +3066,12 @@ button.contact-link span {
 }
 
 /*
- * Fallback when Screen Orientation lock is unavailable (e.g. iOS):
- * visually rotate the fullscreen panorama into landscape while the phone stays portrait.
+ * Phone fallback when the browser cannot lock landscape (mainly iOS).
+ * Size and rotation are applied inline so they match the visible viewport.
  */
 .panorama-container.fullscreen.force-landscape {
-    top: 50%;
-    left: 50%;
-    width: 100vh;
-    height: 100vw;
-    transform: translate(-50%, -50%) rotate(90deg);
-    transform-origin: center center;
+    max-width: none;
+    max-height: none;
 }
 
 /* Custom fullscreen button styles */
