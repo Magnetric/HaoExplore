@@ -150,34 +150,8 @@
         </div>
     </main>
 
-    <!-- Cover Photo Selection Modal -->
-    <div id="coverPhotoModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Select Cover Photo</h3>
-                <button class="modal-close" onclick="closeCoverPhotoModal()">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="gallery-info">
-                    <h4 id="modalGalleryName"></h4>
-                    <p id="modalGalleryLocation"></p>
-                </div>
-                <div class="photos-grid" id="coverPhotoGrid">
-                    <!-- Photos will be loaded here -->
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn-secondary" onclick="closeCoverPhotoModal()">Cancel</button>
-                    <button type="button" class="btn-primary" onclick="saveCoverPhoto()">Set as Cover</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Note: AWS SDK no longer needed for API-based approach -->
-    <!-- <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1001.0.min.js"></script> -->
-    <!-- <script src="admin-script.js"></script> -->
+    <script src="../js/shared.js"></script>
+    <script src="gallery-api.js"></script>
     <script src="admin-script.js"></script>
 </body>
 </html> 

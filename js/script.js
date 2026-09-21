@@ -6,8 +6,8 @@ class PhotoGalleryApp {
     constructor() {
         this.currentFilteredGalleries = [];
         this.galleryMap = null;
-        this.currentDisplayCount = 10; // Initial display count
-        this.itemsPerLoad = 10; // Items per load
+        this.currentDisplayCount = 10;
+        this.isLoadingMore = false;
         
         // DOM Elements
         this.galleryGrid = document.getElementById('galleryGrid');
@@ -22,13 +22,9 @@ class PhotoGalleryApp {
     }
 
     async init() {
-        console.log('Starting application initialization...');
-        
-        // Load galleries from API
         await this.loadGalleriesFromAPI();
         
         this.currentFilteredGalleries = [...galleries];
-        console.log('Initialized with galleries:', galleries.length, 'Filtered:', this.currentFilteredGalleries.length);
         
         this.loadGalleries();
         this.setupFilters();
@@ -36,34 +32,25 @@ class PhotoGalleryApp {
         this.setupSmoothScrolling();
         this.setupSubscribeModal();
         
-        // Initialize map immediately if galleries exist
         if (galleries.length > 0) {
             this.initMap();
         }
         
-        // Add scroll event listeners
         window.addEventListener('scroll', () => {
             this.updateActiveNavLink();
             this.handleHeaderScroll();
         });
         
-        // Add resize event listener
         window.addEventListener('resize', () => {
             this.handleResize();
         });
         
-        // Prevent drag on images
         document.addEventListener('dragstart', e => e.preventDefault());
-        
-        // Setup Load More button
         this.setupLoadMoreButton();
     }
 
     async loadGalleriesFromAPI() {
         try {
-            console.log('Loading galleries from API...');
-            
-            const API_BASE_URL = 'https://5nuxhstp12.execute-api.eu-north-1.amazonaws.com/prod';
             const response = await fetch(`${API_BASE_URL}/galleries`);
             
             if (!response.ok) {
@@ -71,21 +58,8 @@ class PhotoGalleryApp {
             }
             
             const data = await response.json();
-            galleries = data.galleries || [];
-            
-            // Sort galleries by sort order if available
-            if (galleries.length > 0) {
-                galleries.sort((a, b) => {
-                    const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
-                    const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
-                    return orderA - orderB;
-                });
-                console.log('Galleries sorted by sort order');
-            }
-            
-            console.log('Successfully loaded galleries from API:', galleries.length);
+            galleries = sortBySortOrder(data.galleries || []);
             return true;
-            
         } catch (error) {
             console.error('Error loading galleries from API:', error);
             galleries = [];
@@ -100,13 +74,11 @@ class PhotoGalleryApp {
         if (this.currentFilteredGalleries.length === 0) {
             this.galleryGrid.innerHTML = '<div class="no-results">No galleries found matching your criteria.</div>';
             this.galleryLoadMore.style.display = 'none';
-            console.log('No galleries to display');
             return;
         }
         
         this.displayGalleries();
         this.updateLoadMoreButton();
-        console.log('Galleries loaded successfully');
     }
     
     getInitialDisplayCount() {
@@ -154,30 +126,27 @@ class PhotoGalleryApp {
     }
     
     loadMoreGalleries() {
-        // Add loading state
+        if (this.isLoadingMore) return;
+        this.isLoadingMore = true;
+
         this.loadMoreBtn.classList.add('loading');
         this.loadMoreBtn.innerHTML = '<i class="fas fa-spinner"></i><span>Loading...</span>';
         
-        // Simulate loading delay to show loading effect
-        setTimeout(() => {
-            const previousCount = this.currentDisplayCount;
-            this.currentDisplayCount += this.getItemsPerLoad();
-            
-            // Only add new galleries
-            const newGalleries = this.currentFilteredGalleries.slice(previousCount, this.currentDisplayCount);
-            
-            newGalleries.forEach((gallery, index) => {
-                const actualIndex = previousCount + index;
-                const galleryElement = this.createGalleryElement(gallery, actualIndex);
-                this.galleryGrid.appendChild(galleryElement);
-            });
-            
-            this.updateLoadMoreButton();
-            
-            // Remove loading state
-            this.loadMoreBtn.classList.remove('loading');
-            this.loadMoreBtn.innerHTML = '<i class="fas fa-arrow-down"></i><span>Load More</span>';
-        }, 300);
+        const previousCount = this.currentDisplayCount;
+        this.currentDisplayCount += this.getItemsPerLoad();
+        
+        const newGalleries = this.currentFilteredGalleries.slice(previousCount, this.currentDisplayCount);
+        
+        newGalleries.forEach((gallery, index) => {
+            const actualIndex = previousCount + index;
+            const galleryElement = this.createGalleryElement(gallery, actualIndex);
+            this.galleryGrid.appendChild(galleryElement);
+        });
+        
+        this.updateLoadMoreButton();
+        this.loadMoreBtn.classList.remove('loading');
+        this.loadMoreBtn.innerHTML = '<i class="fas fa-arrow-down"></i><span>Load More</span>';
+        this.isLoadingMore = false;
     }
     
     setupLoadMoreButton() {
@@ -251,9 +220,7 @@ class PhotoGalleryApp {
         this.showSubscribeMessage('Subscribing...', 'info');
         
         try {
-            // Use separate user API endpoint for subscriptions
-            const USER_API_BASE_URL = 'https://5nuxhstp12.execute-api.eu-north-1.amazonaws.com/prod';
-            const response = await fetch(`${USER_API_BASE_URL}/subscribe`, {
+            const response = await fetch(`${API_BASE_URL}/subscribe`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -310,13 +277,14 @@ class PhotoGalleryApp {
     }
     
     handleResize() {
-        // Debounce to avoid frequent triggering
         clearTimeout(this.resizeTimeout);
         this.resizeTimeout = setTimeout(() => {
             const newInitialCount = this.getInitialDisplayCount();
-            if (newInitialCount !== this.currentDisplayCount) {
-                // If initial display count changes, reload galleries
-                this.loadGalleries();
+            // Grow display count when viewport needs more items; never shrink after Load More
+            if (this.currentDisplayCount < newInitialCount) {
+                this.currentDisplayCount = newInitialCount;
+                this.displayGalleries();
+                this.updateLoadMoreButton();
             }
         }, 250);
     }
@@ -326,29 +294,16 @@ class PhotoGalleryApp {
         article.className = 'gallery-item';
         article.setAttribute('data-index', index);
         
-        // Use coverPhotoURL if available, otherwise use a placeholder
-        const coverImage = gallery.coverPhotoURL || 'images/homephoto.webp';
-        const location = gallery.continent;
-        
-        // Extract year(s) from years array
-        let year = '';
-        if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
-            // If multiple years, join them with commas, otherwise use single year
-            if (gallery.years.length > 1) {
-                year = gallery.years.map(y => parseInt(y)).sort((a, b) => a - b).join(', ');
-            } else {
-                year = parseInt(gallery.years[0]);
-            }
-        } else {
-            year = new Date(gallery.createdAt).getFullYear();
-        }
-        
+        const coverImage = escapeHtml(gallery.coverPhotoURL || 'images/homephoto.webp');
+        const location = escapeHtml(gallery.continent || '');
+        const year = escapeHtml(formatGalleryYears(gallery));
         const photoCount = gallery.photoCount || 0;
+        const name = escapeHtml(gallery.name || '');
         
         article.innerHTML = `
-            <img src="${coverImage}" alt="${gallery.name}" loading="lazy" onerror="this.src='images/homephoto.webp'">
+            <img src="${coverImage}" alt="${name}" loading="lazy" onerror="this.src='images/homephoto.webp'">
             <div class="gallery-info">
-                <h3 class="gallery-title">${gallery.name}</h3>
+                <h3 class="gallery-title">${name}</h3>
                 <div class="gallery-meta">
                     <span><i class="fas fa-map-marker-alt"></i> ${location}</span>
                     <span><i class="fas fa-calendar"></i> ${year}</span>
@@ -364,27 +319,10 @@ class PhotoGalleryApp {
     }
 
     setupFilters() {
-        // Clear existing options
         this.yearFilter.innerHTML = '<option value="">All Years</option>';
         this.locationFilter.innerHTML = '<option value="">All Locations</option>';
         
-        // Populate year filter from years array
-        const allYears = [];
-        galleries.forEach(gallery => {
-            if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
-                gallery.years.forEach(year => {
-                    allYears.push(parseInt(year));
-                });
-            } else {
-                const fallbackYear = new Date(gallery.createdAt).getFullYear();
-                allYears.push(fallbackYear);
-            }
-        });
-        
-        // Remove duplicates and sort in descending order
-        const years = [...new Set(allYears)].sort((a, b) => b - a);
-        
-        console.log('Available years for filter:', years);
+        const years = collectYearsFromGalleries(galleries);
         years.forEach(year => {
             const option = document.createElement('option');
             option.value = year;
@@ -392,9 +330,7 @@ class PhotoGalleryApp {
             this.yearFilter.appendChild(option);
         });
         
-        // Populate location filter with continents
         const locations = [...new Set(galleries.map(gallery => gallery.continent || gallery.country || 'Unknown'))].sort();
-        console.log('Available locations for filter:', locations);
         locations.forEach(location => {
             const option = document.createElement('option');
             option.value = location;
@@ -402,29 +338,21 @@ class PhotoGalleryApp {
             this.locationFilter.appendChild(option);
         });
         
-        // Add event listeners
-        this.yearFilter.addEventListener('change', () => this.filterGalleries());
-        this.locationFilter.addEventListener('change', () => this.filterGalleries());
-        
-        // Setup Clear Filters button
-        const clearFiltersBtn = document.getElementById('clearFilters');
-        if (clearFiltersBtn) {
-            clearFiltersBtn.addEventListener('click', () => this.clearFilters());
+        if (!this._filtersBound) {
+            this.yearFilter.addEventListener('change', () => this.filterGalleries());
+            this.locationFilter.addEventListener('change', () => this.filterGalleries());
+            const clearFiltersBtn = document.getElementById('clearFilters');
+            if (clearFiltersBtn) {
+                clearFiltersBtn.addEventListener('click', () => this.clearFilters());
+            }
+            this._filtersBound = true;
         }
     }
     
     clearFilters() {
         this.yearFilter.value = '';
         this.locationFilter.value = '';
-        this.currentFilteredGalleries = [...galleries];
-        
-        // Maintain sort order after clearing filters
-        this.currentFilteredGalleries.sort((a, b) => {
-            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
-            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
-            return orderA - orderB;
-        });
-        
+        this.currentFilteredGalleries = sortBySortOrder(galleries);
         this.loadGalleries();
     }
 
@@ -433,7 +361,6 @@ class PhotoGalleryApp {
         const selectedLocation = this.locationFilter.value;
         
         this.currentFilteredGalleries = galleries.filter(gallery => {
-            // Check year from years array
             let yearMatch = !selectedYear;
             if (selectedYear) {
                 if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
@@ -447,13 +374,7 @@ class PhotoGalleryApp {
             return yearMatch && locationMatch;
         });
         
-        // Maintain sort order after filtering
-        this.currentFilteredGalleries.sort((a, b) => {
-            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
-            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
-            return orderA - orderB;
-        });
-        
+        this.currentFilteredGalleries = sortBySortOrder(this.currentFilteredGalleries);
         this.loadGalleries();
     }
 
@@ -547,23 +468,19 @@ class GalleryMap {
     constructor(config = {}) {
         this.map = null;
         this.markers = [];
-        this.coordinateCache = new Map();
         this.isInitialized = false;
         this.isLoadingMarkers = false;
         this.markerQueue = [];
+        this.initRetries = 0;
+        this.maxInitRetries = 10;
         
-        // Filter state
         this.selectedYears = new Set();
         this.allYears = [];
         this.yearCounts = {};
         
-        // Configurable batch processing parameters
         this.batchSize = config.batchSize || 3;
         this.batchDelay = config.batchDelay || 100;
-        this.maxRetries = config.maxRetries || 3;
-        this.retryDelay = config.retryDelay || 1000;
         
-        // Marker size configuration
         this.markerSizeConfig = {
             minSize: 30,
             maxSize: 100,
@@ -571,7 +488,6 @@ class GalleryMap {
             maxZoom: 18
         };
         
-        // Performance monitoring
         this.performanceMetrics = {
             mapInitStart: 0,
             mapInitEnd: 0,
@@ -585,18 +501,15 @@ class GalleryMap {
 
     async init() {
         try {
-            if (this.isInitialized) {
-                console.log('Map already initialized');
-                return;
-            }
+            if (this.isInitialized) return;
 
             if (!galleries || galleries.length === 0) {
-                console.log('No galleries available, retrying in 1 second...');
-                setTimeout(() => this.init(), 1000);
+                if (this.initRetries < this.maxInitRetries) {
+                    this.initRetries += 1;
+                    setTimeout(() => this.init(), 1000);
+                }
                 return;
             }
-
-            console.log('Initializing map with galleries:', galleries.length);
             
             this.performanceMetrics.mapInitStart = performance.now();
             this.performanceMetrics.totalMarkers = galleries.length;
@@ -604,14 +517,9 @@ class GalleryMap {
             this.initMap();
             
             this.performanceMetrics.mapInitEnd = performance.now();
-            const mapInitTime = this.performanceMetrics.mapInitEnd - this.performanceMetrics.mapInitStart;
-            console.log(`Map initialized in ${mapInitTime.toFixed(2)}ms`);
-            
             this.hideLoading();
             this.isInitialized = true;
-            
             this.startBackgroundMarkerLoading();
-            
         } catch (error) {
             console.error('Error initializing map:', error);
             this.hideLoading();
@@ -643,11 +551,9 @@ class GalleryMap {
         }).addTo(this.map);
     
         this.map.on('zoomend', () => {
-            console.log('Zoom event triggered, current zoom level:', this.map.getZoom());
             this.updateMarkerSizes();
         });
         
-        // Add wheel event handling for Year Filter
         this.setupYearFilterWheelEvents();
     }
 
@@ -658,31 +564,20 @@ class GalleryMap {
     }
     
     collectYearData() {
-        this.allYears = [];
+        this.allYears = collectYearsFromGalleries(galleries);
         this.yearCounts = {};
         
         galleries.forEach(gallery => {
             if (gallery.years && Array.isArray(gallery.years) && gallery.years.length > 0) {
                 gallery.years.forEach(year => {
-                    const yearInt = parseInt(year);
-                    if (!this.allYears.includes(yearInt)) {
-                        this.allYears.push(yearInt);
-                    }
+                    const yearInt = parseInt(year, 10);
                     this.yearCounts[yearInt] = (this.yearCounts[yearInt] || 0) + 1;
                 });
-            } else {
+            } else if (gallery.createdAt) {
                 const fallbackYear = new Date(gallery.createdAt).getFullYear();
-                if (!this.allYears.includes(fallbackYear)) {
-                    this.allYears.push(fallbackYear);
-                }
                 this.yearCounts[fallbackYear] = (this.yearCounts[fallbackYear] || 0) + 1;
             }
         });
-        
-        this.allYears.sort((a, b) => b - a);
-        
-        console.log('Collected years:', this.allYears);
-        console.log('Year counts:', this.yearCounts);
     }
     
     generateYearOptions() {
@@ -700,7 +595,6 @@ class GalleryMap {
                 <label for="year-${year}">${year}</label>
                 <span class="count">${count}</span>
             `;
-            
             container.appendChild(option);
         });
     }
@@ -717,137 +611,29 @@ class GalleryMap {
     setupYearFilterWheelEvents() {
         const yearFilterContainer = document.querySelector('.map-filter-control');
         if (!yearFilterContainer) return;
-        
-        console.log('Setting up wheel events for Year Filter container:', yearFilterContainer);
-        
-        // Add wheel event handling for the entire Year Filter container
-        yearFilterContainer.addEventListener('wheel', (e) => {
-            console.log('Wheel event on main container');
+
+        const stopMapScroll = (e) => {
             e.stopPropagation();
-            e.preventDefault();
-            
-            // Manual scroll handling
+        };
+
+        yearFilterContainer.addEventListener('wheel', (e) => {
+            e.stopPropagation();
             const yearCheckboxes = yearFilterContainer.querySelector('.year-checkboxes');
-            if (yearCheckboxes) {
-                const scrollAmount = e.deltaY > 0 ? 30 : -30; // Scroll amount
-                yearCheckboxes.scrollTop += scrollAmount;
-                console.log('Scrolled year checkboxes by:', scrollAmount, 'New scrollTop:', yearCheckboxes.scrollTop);
+            if (!yearCheckboxes) return;
+
+            // Allow native scroll inside the checkbox list; only block map zoom
+            const atTop = yearCheckboxes.scrollTop <= 0 && e.deltaY < 0;
+            const atBottom = yearCheckboxes.scrollTop + yearCheckboxes.clientHeight >= yearCheckboxes.scrollHeight && e.deltaY > 0;
+            if (!atTop && !atBottom) {
+                e.preventDefault();
+                yearCheckboxes.scrollTop += e.deltaY;
+            } else {
+                e.preventDefault();
             }
         }, { passive: false });
-        
-        // Add wheel event handling for all child elements in Year Filter
-        this.setupWheelEventForElement(yearFilterContainer);
-        
-        // Ensure the entire area responds to wheel events
-        this.ensureFullWheelCoverage(yearFilterContainer);
-        
-        // Add touch event handling for mobile
-        this.setupTouchEvents(yearFilterContainer);
-        
-        console.log('Year Filter wheel events configured');
-    }
-    
-    setupWheelEventForElement(element) {
-        // Add wheel event handling for element and all its children
-        const addWheelEvent = (el) => {
-            el.addEventListener('wheel', (e) => {
-                console.log('Wheel event on element:', el.tagName, el.className);
-                // Prevent event bubbling to map, but allow scroll handling
-                e.stopPropagation();
-                
-                // Find the nearest parent scroll container
-                const scrollContainer = el.closest('.year-checkboxes') || 
-                                     el.closest('.map-filter-control');
-                
-                if (scrollContainer) {
-                    // Manual scroll handling
-                    const scrollAmount = e.deltaY > 0 ? 30 : -30;
-                    scrollContainer.scrollTop += scrollAmount;
-                    console.log('Scrolled container by:', scrollAmount, 'New scrollTop:', scrollContainer.scrollTop);
-                }
-                
-                // Prevent default behavior
-                e.preventDefault();
-            }, { passive: false });
-        };
-        
-        // Add for current element
-        addWheelEvent(element);
-        
-        // Add for all child elements
-        const allChildren = element.querySelectorAll('*');
-        allChildren.forEach(child => {
-            addWheelEvent(child);
-        });
-        
-        // Monitor newly added elements
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        addWheelEvent(node);
-                        // Also add events for child elements of new elements
-                        const newChildren = node.querySelectorAll('*');
-                        newChildren.forEach(child => {
-                            addWheelEvent(child);
-                        });
-                    }
-                });
-            });
-        });
-        
-        observer.observe(element, {
-            childList: true,
-            subtree: true
-        });
-    }
-    
-    setupTouchEvents(container) {
-        // Prevent touch events from propagating to map
-        const preventTouchPropagation = (e) => {
-            e.stopPropagation();
-        };
-        
-        // Add touch event listeners to prevent map interaction
-        container.addEventListener('touchstart', preventTouchPropagation, { passive: false });
-        container.addEventListener('touchmove', preventTouchPropagation, { passive: false });
-        container.addEventListener('touchend', preventTouchPropagation, { passive: false });
-        
-        // Add touch event listeners to all child elements
-        const allChildren = container.querySelectorAll('*');
-        allChildren.forEach(child => {
-            child.addEventListener('touchstart', preventTouchPropagation, { passive: false });
-            child.addEventListener('touchmove', preventTouchPropagation, { passive: false });
-            child.addEventListener('touchend', preventTouchPropagation, { passive: false });
-        });
-    }
-    
-    ensureFullWheelCoverage(container) {
-        // Ensure the entire container area responds to wheel events
-        // Set CSS properties to ensure events are captured correctly
-        container.style.pointerEvents = 'auto';
-        
-        // Add wheel event handling for all direct child elements of container
-        const directChildren = Array.from(container.children);
-        directChildren.forEach(child => {
-            if (child.tagName !== 'DIV' || !child.classList.contains('wheel-overlay')) {
-                child.addEventListener('wheel', (e) => {
-                    console.log('Wheel event on direct child:', child.tagName, child.className);
-                    e.stopPropagation();
-                    e.preventDefault();
-                    
-                    // Manual scroll handling
-                    const yearCheckboxes = container.querySelector('.year-checkboxes');
-                    if (yearCheckboxes) {
-                        const scrollAmount = e.deltaY > 0 ? 30 : -30;
-                        yearCheckboxes.scrollTop += scrollAmount;
-                        console.log('Scrolled via direct child by:', scrollAmount, 'New scrollTop:', yearCheckboxes.scrollTop);
-                    }
-                }, { passive: false });
-            }
-        });
-        
-        console.log('Enhanced wheel event coverage for container');
+
+        yearFilterContainer.addEventListener('touchstart', stopMapScroll, { passive: true });
+        yearFilterContainer.addEventListener('touchmove', stopMapScroll, { passive: true });
     }
     
     handleYearFilterChange() {
@@ -855,10 +641,9 @@ class GalleryMap {
         
         const checkboxes = document.querySelectorAll('#mapYearCheckboxes input[type="checkbox"]:checked');
         checkboxes.forEach(checkbox => {
-            this.selectedYears.add(parseInt(checkbox.value));
+            this.selectedYears.add(parseInt(checkbox.value, 10));
         });
         
-        console.log('Selected years:', Array.from(this.selectedYears));
         this.updateMarkerVisibility();
     }
     
@@ -922,31 +707,25 @@ class GalleryMap {
     
     updateMarkerSizes() {
         const newSize = this.calculateMarkerSize();
+        const fallbackCover = 'images/homephoto.webp';
         
-        this.markers.forEach((marker, index) => {
-            const markerLatLng = marker.getLatLng();
-            
-            const gallery = galleries.find(g => {
-                if (g.latitude && g.longitude) {
-                    return Math.abs(g.latitude - markerLatLng.lat) < 0.001 && 
-                           Math.abs(g.longitude - markerLatLng.lng) < 0.001;
-                }
-                return false;
-            });
-            
-            
+        this.markers.forEach((marker) => {
+            const gallery = marker.galleryData;
+            if (!gallery) return;
             
             const badgeSize = Math.max(16, Math.round(newSize * 0.3));
             const badgeFontSize = Math.max(8, Math.round(badgeSize * 0.4));
+            const cover = escapeHtml(gallery.coverPhotoURL || fallbackCover);
+            const name = escapeHtml(gallery.name || '');
             
             const newIcon = L.divIcon({
                 className: 'gallery-map-marker',
                 html: `
                     <div class="marker-container" style="width: ${newSize}px; height: ${newSize}px;">
                         <div class="marker-image" style="width: ${newSize}px; height: ${newSize}px;">
-                            <img src="${gallery.coverPhotoURL}" 
-                                 alt="${gallery.name}" 
-                                 onerror="this.src='https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&h=300&fit=crop'">
+                            <img src="${cover}" 
+                                 alt="${name}" 
+                                 onerror="this.src='${fallbackCover}'">
                         </div>
                         <div class="marker-badge" style="width: ${badgeSize}px; height: ${badgeSize}px; font-size: ${badgeFontSize}px;">
                             <span class="photo-count">${gallery.photoCount || 0}</span>
@@ -1007,22 +786,9 @@ class GalleryMap {
     async processMarkerBatch() {
         if (this.markerQueue.length === 0) {
             this.isLoadingMarkers = false;
-            
             this.performanceMetrics.markersLoadEnd = performance.now();
-            const markersLoadTime = this.performanceMetrics.markersLoadEnd - this.performanceMetrics.markersLoadStart;
-            
-            console.log('All markers loaded');
-            console.log(`Performance Summary:
-                - Map initialization: ${(this.performanceMetrics.mapInitEnd - this.performanceMetrics.mapInitStart).toFixed(2)}ms
-                - Markers loading: ${markersLoadTime.toFixed(2)}ms
-                - Total markers: ${this.performanceMetrics.totalMarkers}
-                - Successful: ${this.performanceMetrics.successfulMarkers}
-                - Failed: ${this.performanceMetrics.failedMarkers}
-                - Success rate: ${((this.performanceMetrics.successfulMarkers / this.performanceMetrics.totalMarkers) * 100).toFixed(1)}%`);
-            
             this.fitAllMarkers();
             this.initFilterControls();
-            
             return;
         }
 
@@ -1035,10 +801,9 @@ class GalleryMap {
                     this.addMarker(gallery, coordinates);
                     this.performanceMetrics.successfulMarkers++;
                     return true;
-                } else {
-                    this.performanceMetrics.failedMarkers++;
-                    return false;
                 }
+                this.performanceMetrics.failedMarkers++;
+                return false;
             } catch (error) {
                 console.error(`Error getting coordinates for ${gallery.name}:`, error);
                 this.performanceMetrics.failedMarkers++;
@@ -1046,8 +811,7 @@ class GalleryMap {
             }
         });
 
-        const results = await Promise.all(promises);
-        const successfulMarkers = results.filter(result => result === true).length;
+        await Promise.all(promises);
         
         const totalMarkers = galleries.length;
         const loadedMarkers = totalMarkers - this.markerQueue.length;
@@ -1072,18 +836,21 @@ class GalleryMap {
         const currentSize = this.calculateMarkerSize();
         const iconSize = [currentSize, currentSize];
         const iconAnchor = [currentSize / 2, currentSize / 2];
+        const fallbackCover = 'images/homephoto.webp';
         
         const badgeSize = Math.max(20, Math.round(currentSize * 0.3));
         const badgeFontSize = Math.max(8, Math.round(badgeSize * 0.4));
+        const cover = escapeHtml(gallery.coverPhotoURL || fallbackCover);
+        const name = escapeHtml(gallery.name || '');
         
         const icon = L.divIcon({
             className: 'gallery-map-marker',
             html: `
                 <div class="marker-container" style="width: ${currentSize}px; height: ${currentSize}px;">
                     <div class="marker-image" style="width: ${currentSize}px; height: ${currentSize}px;">
-                        <img src="${gallery.coverPhotoURL}" 
-                     alt="${gallery.name}" 
-                     onerror="this.src='https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&h=300&fit=crop'">
+                        <img src="${cover}" 
+                     alt="${name}" 
+                     onerror="this.src='${fallbackCover}'">
                     </div>
                     <div class="marker-badge" style="width: ${badgeSize}px; height: ${badgeSize}px; font-size: ${badgeFontSize}px;">
                         <span class="photo-count">${gallery.photoCount || 0}</span>
@@ -1113,31 +880,35 @@ class GalleryMap {
         });
         
         marker.on('mouseover', () => {
-            marker.getElement().classList.add('marker-hover');
+            marker.getElement()?.classList.add('marker-hover');
         });
         
         marker.on('mouseout', () => {
-            marker.getElement().classList.remove('marker-hover');
+            marker.getElement()?.classList.remove('marker-hover');
         });
     }
 
     createPopupContent(gallery) {
-        const coverImage = gallery.coverPhotoURL || 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&h=300&fit=crop';
+        const coverImage = escapeHtml(gallery.coverPhotoURL || 'images/homephoto.webp');
+        const name = escapeHtml(gallery.name || '');
+        const continent = escapeHtml(gallery.continent || '');
+        const country = escapeHtml(gallery.country || '');
+        const galleryId = escapeHtml(gallery.galleryId || gallery.id || '');
         
         return `
             <div class="gallery-popup">
                 <div class="popup-header">
-                <img src="${coverImage}" alt="${gallery.name}" onerror="this.src='https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&h=300&fit=crop'">
+                <img src="${coverImage}" alt="${name}" onerror="this.src='images/homephoto.webp'">
                     <div class="popup-overlay">
-                <h3>${gallery.name}</h3>
+                <h3>${name}</h3>
                     </div>
                 </div>
                 <div class="popup-content">
                     <div class="popup-info">
-                        <p class="location"><i class="fas fa-map-marker-alt"></i> ${gallery.continent} > ${gallery.country}</p>
+                        <p class="location"><i class="fas fa-map-marker-alt"></i> ${continent} > ${country}</p>
                         <p class="photos"><i class="fas fa-images"></i> ${gallery.photoCount || 0} photos</p>
                     </div>
-                <button onclick="app.galleryMap.openGallery('${gallery.galleryId || gallery.id}')" 
+                <button onclick="app.galleryMap.openGallery('${galleryId}')" 
                             class="popup-button">
                         <i class="fas fa-external-link-alt"></i>
                     View Gallery
@@ -1166,231 +937,69 @@ class GalleryMap {
     }
 }
 
-// Add CSS for the no-results message
-const style = document.createElement('style');
-style.textContent = `
-    .no-results {
-        text-align: center;
-        padding: 4rem 2rem;
-        color: #7f8c8d;
-        font-size: 1.1rem;
-    }
-`;
-document.head.appendChild(style);
-
 // Initialize application when DOM is loaded
 let app;
 document.addEventListener('DOMContentLoaded', () => {
     app = new PhotoGalleryApp();
 });
 
-// Copy WeChat ID function
 function copyWechat() {
     const wechatId = 'Magnetrician';
-    
-    // Create a temporary textarea element
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(wechatId).then(() => {
+            showCopyToast('Wechat ID copied', 'success');
+        }).catch(() => {
+            showCopyToast('Copy failed, please copy manually: Magnetrician', 'error');
+        });
+        return;
+    }
+
     const textarea = document.createElement('textarea');
     textarea.value = wechatId;
     textarea.style.position = 'fixed';
     textarea.style.opacity = '0';
     document.body.appendChild(textarea);
-    
-    // Select and copy the text
     textarea.select();
-    textarea.setSelectionRange(0, 99999); // For mobile devices
-    
     try {
-        const successful = document.execCommand('copy');
-        if (successful) {
-            showCopySuccess();
-        } else {
-            // Fallback for modern browsers
-            navigator.clipboard.writeText(wechatId).then(() => {
-                showCopySuccess();
-            }).catch(() => {
-                showCopyError();
-            });
-        }
-    } catch (err) {
-        // Fallback for modern browsers
-        navigator.clipboard.writeText(wechatId).then(() => {
-            showCopySuccess();
-        }).catch(() => {
-            showCopyError();
-        });
+        document.execCommand('copy');
+        showCopyToast('Wechat ID copied', 'success');
+    } catch (_) {
+        showCopyToast('Copy failed, please copy manually: Magnetrician', 'error');
     }
-    
-    // Clean up
     document.body.removeChild(textarea);
 }
 
-function showCopySuccess() {
-    // Create success message
-    const message = document.createElement('div');
-    message.className = 'copy-message copy-success';
-    message.innerHTML = '<i class="fas fa-check"></i> Wechat ID copied';
-    
-    // Mobile-adapted message styles
-    const isMobile = window.innerWidth <= 768;
-    message.style.cssText = `
-        position: fixed;
-        top: ${isMobile ? '10px' : '20px'};
-        ${isMobile ? 'left: 10px; right: 10px;' : 'right: 20px;'}
-        background: #27ae60;
-        color: white;
-        padding: ${isMobile ? '10px 15px' : '12px 20px'};
-        border-radius: 8px;
-        font-size: ${isMobile ? '13px' : '14px'};
-        z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        animation: slideIn 0.3s ease-out;
-        text-align: center;
-    `;
-    
-    document.body.appendChild(message);
-    
-    // Remove message after 3 seconds
-    setTimeout(() => {
-        message.style.animation = 'slideOut 0.3s ease-in';
-        setTimeout(() => {
-            if (message.parentNode) {
-                document.body.removeChild(message);
-            }
-        }, 300);
-    }, 3000);
-}
-
-function showCopyError() {
-    // Create error message
-    const message = document.createElement('div');
-    message.className = 'copy-message copy-error';
-    message.innerHTML = '<i class="fas fa-times"></i> Copy failed, please copy manually: Magnetrician';
-    
-    // Mobile-adapted message styles
-    const isMobile = window.innerWidth <= 768;
-    message.style.cssText = `
-        position: fixed;
-        top: ${isMobile ? '10px' : '20px'};
-        ${isMobile ? 'left: 10px; right: 10px;' : 'right: 20px;'}
-        background: #e74c3c;
-        color: white;
-        padding: ${isMobile ? '10px 15px' : '12px 20px'};
-        border-radius: 8px;
-        font-size: ${isMobile ? '13px' : '14px'};
-        z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        animation: slideIn 0.3s ease-out;
-        text-align: center;
-    `;
-    
-    document.body.appendChild(message);
-    
-    // Remove message after 5 seconds
-    setTimeout(() => {
-        message.style.animation = 'slideOut 0.3s ease-in';
-        setTimeout(() => {
-            if (message.parentNode) {
-                document.body.removeChild(message);
-            }
-        }, 300);
-    }, 5000);
-}
-
-// Add CSS animations for copy messages
-const copyMessageStyle = document.createElement('style');
-copyMessageStyle.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    @keyframes slideOut {
-        from {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-    }
-    
-    @media (max-width: 768px) {
-        @keyframes slideIn {
-            from {
-                transform: translateY(-100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-        
-        @keyframes slideOut {
-            from {
-                transform: translateY(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateY(-100%);
-                opacity: 0;
-            }
-        }
-    }
-`;
-document.head.appendChild(copyMessageStyle);
-
-// Year Filter toggle function for mobile
 function toggleYearFilter() {
     const filterControl = document.querySelector('.map-filter-control');
     const showFilterBtn = document.querySelector('.show-filter-btn');
     
     if (filterControl && showFilterBtn) {
         if (filterControl.style.display === 'none' || filterControl.style.display === '') {
-            // Show filter
             filterControl.style.display = 'block';
             showFilterBtn.style.display = 'none';
-            
-            // Add click outside listener to close filter
             setTimeout(() => {
                 document.addEventListener('click', closeFilterOnClickOutside);
             }, 100);
         } else {
-            // Hide filter
             hideYearFilter();
         }
     }
 }
 
-// Function to hide year filter
 function hideYearFilter() {
     const filterControl = document.querySelector('.map-filter-control');
     const showFilterBtn = document.querySelector('.show-filter-btn');
     
-    if (filterControl) {
-        filterControl.style.display = 'none';
-    }
-    if (showFilterBtn) {
-        showFilterBtn.style.display = 'flex';
-    }
-    
-    // Remove click outside listener
+    if (filterControl) filterControl.style.display = 'none';
+    if (showFilterBtn) showFilterBtn.style.display = 'flex';
     document.removeEventListener('click', closeFilterOnClickOutside);
 }
 
-// Function to close filter when clicking outside
 function closeFilterOnClickOutside(event) {
     const filterControl = document.querySelector('.map-filter-control');
     const showFilterBtn = document.querySelector('.show-filter-btn');
     
-    // Check if click is outside the filter control and not on the show filter button
     if (filterControl && showFilterBtn && 
         !filterControl.contains(event.target) && 
         !showFilterBtn.contains(event.target)) {

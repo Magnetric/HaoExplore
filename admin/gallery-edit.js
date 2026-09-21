@@ -1,122 +1,5 @@
 // Gallery Edit Script - API Version
-// Complete rewrite to use Lambda API instead of direct S3 operations
 
-// ==================== CONFIGURATION ====================
-const API_BASE_URL = 'https://5nuxhstp12.execute-api.eu-north-1.amazonaws.com/prod';
-
-// ==================== API CLIENT ====================
-class GalleryAPI {
-    constructor(baseUrl) {
-        this.baseUrl = baseUrl;
-    }
-
-    async getGallery(galleryId) {
-        try {
-            const response = await fetch(`${this.baseUrl}/galleries?id=${galleryId}`);
-            
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to get gallery');
-            }
-
-            const data = await response.json();
-            return normalizeGalleryFromDynamoDB(data);
-        } catch (error) {
-            console.error('Error getting gallery:', error);
-            throw error;
-        }
-    }
-
-    async updateGallery(galleryData) {
-        try {
-            const response = await fetch(`${this.baseUrl}/galleries`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(galleryData)
-            });
-
-            console.log('API response status:', response.status);
-            console.log('API response headers:', response.headers);
-
-            if (!response.ok) {
-                const error = await response.json();
-                console.error('API error response:', error);
-                throw new Error(error.error || 'Failed to update gallery');
-            }
-
-            const result = await response.json();
-            console.log('API success response:', result);
-            return result;
-        } catch (error) {
-            console.error('Error updating gallery:', error);
-            throw error;
-        }
-    }
-
-    async deletePhoto(galleryId, payload) {
-        const response = await fetch(`${this.baseUrl}/galleries?id=${encodeURIComponent(galleryId)}&action=delete_photo`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Failed to delete photo');
-        }
-        return await response.json();
-    }
-
-    async getUploadUrls(galleryId, photosData) {
-        try {
-            const response = await fetch(`${this.baseUrl}/galleries?id=${galleryId}&action=get_upload_urls`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ photos: photosData })
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to get upload URLs');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error getting upload URLs:', error);
-            throw error;
-        }
-    }
-
-    async updateGalleryPhotos(galleryId, photosData) {
-        try {
-            const response = await fetch(`${this.baseUrl}/galleries?action=update_GalleryPhotos`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    galleryId: galleryId,
-                    photos: photosData
-                })
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to update gallery photos');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error updating gallery photos:', error);
-            throw error;
-        }
-    }
-}
-
-// Initialize API client
 const galleryAPI = new GalleryAPI(API_BASE_URL);
 
 // ==================== STATE MANAGEMENT ====================
@@ -134,59 +17,49 @@ async function convertToWebP(file, quality = 0.8, isPanorama = false) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
 
         img.onload = () => {
             const MAX_WIDTH = 16384;
-
-            // 原始尺寸
             let w = img.naturalWidth;
             let h = img.naturalHeight;
 
-            // 如果超过 WebP 最大宽度，按比例缩小
             if (w > MAX_WIDTH) {
                 const scale = MAX_WIDTH / w;
                 w = MAX_WIDTH;
                 h = Math.round(h * scale);
-                console.log(`Image resized proportionally to: ${w}x${h}`);
             }
 
-            // 设置 canvas 尺寸
             canvas.width = w;
             canvas.height = h;
 
-            // 根据是否是全景决定是否平滑
             if (isPanorama) {
                 ctx.imageSmoothingEnabled = false;
-                console.log('Image smoothing disabled to preserve panorama pixels');
             } else {
                 ctx.imageSmoothingEnabled = true;
                 ctx.imageSmoothingQuality = 'high';
-                console.log('Image smoothing enabled for regular processing');
             }
 
-            // 绘制缩放后的图像
             ctx.drawImage(img, 0, 0, w, h);
+            revokeObjectUrl(objectUrl);
 
-            // 转换为 WebP Blob
             canvas.toBlob((blob) => {
                 if (blob) {
                     blob.width = w;
                     blob.height = h;
-                    console.log(`WebP conversion completed: ${w}x${h}, size: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
                     resolve(blob);
                 } else {
-                    console.error('Failed to create WebP blob');
                     resolve(null);
                 }
             }, 'image/webp', quality);
         };
 
         img.onerror = () => {
-            console.error('Failed to load image for conversion');
+            revokeObjectUrl(objectUrl);
             resolve(null);
         };
 
-        img.src = URL.createObjectURL(file);
+        img.src = objectUrl;
     });
 }
 
@@ -198,17 +71,15 @@ async function generateThumbnail(file, maxWidth = 2000, quality = 0.4) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
         
         img.onload = function() {
-            // Calculate new dimensions maintaining aspect ratio
             let { width, height } = img;
             if (width > maxWidth) {
                 height = (height * maxWidth) / width;
                 width = maxWidth;
             }
             
-            // For thumbnails, we can be more aggressive with size reduction
-            // If the calculated size is still large, reduce it further
             if (width > 1500) {
                 const scale = 1500 / width;
                 width = Math.round(width * scale);
@@ -217,22 +88,28 @@ async function generateThumbnail(file, maxWidth = 2000, quality = 0.4) {
             
             canvas.width = width;
             canvas.height = height;
-            
-            // Use high-quality image smoothing for better thumbnail quality
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
-            
-            // Draw and compress with optimized settings
             ctx.drawImage(img, 0, 0, width, height);
+            revokeObjectUrl(objectUrl);
+
             canvas.toBlob((blob) => {
-                // Add dimensions to blob for reference
+                if (!blob) {
+                    resolve(null);
+                    return;
+                }
                 blob.width = width;
                 blob.height = height;
                 resolve(blob);
             }, 'image/webp', quality);
         };
+
+        img.onerror = () => {
+            revokeObjectUrl(objectUrl);
+            resolve(null);
+        };
         
-        img.src = URL.createObjectURL(file);
+        img.src = objectUrl;
     });
 }
 
@@ -377,8 +254,8 @@ async function loadGallery() {
         console.log('Loading gallery from API:', galleryId);
         showMessage('Loading gallery...', 'info');
         
-        currentGallery = await galleryAPI.getGallery(galleryId);
-        photos = currentGallery.photos || [];
+        currentGallery = await galleryAPI.getGallery(galleryId, { normalize: true });
+        photos = sortBySortOrder(currentGallery.photos || []);
         currentGalleryYears = currentGallery.years || [];
         
         // Convert coverPhotoURL to coverPhoto object for frontend compatibility
@@ -554,21 +431,22 @@ async function refreshPhotoCountFromServer() {
 function updatePhotosGrid() {
     const photosGrid = document.getElementById('photosGrid');
     if (!photosGrid) return;
+
+    photos = sortBySortOrder(photos);
     
     if (photos.length === 0) {
         photosGrid.innerHTML = `
             <div class="no-photos">
                 <i class="fas fa-images" style="font-size: 3rem; color: #bdc3c7; margin-bottom: 1rem;"></i>
                 <h4>No Photos</h4>
-                <p>This gallery doesn't have any photos yet.</p>
-                <p><strong>Note:</strong> Photo upload functionality will be added in a future update.</p>
+                <p>This gallery doesn't have any photos yet. Use "Add Photos" to upload.</p>
             </div>
         `;
         return;
     }
 
     photosGrid.innerHTML = photos.map((photo, index) => `
-        <div class="photo-item-enhanced" data-photo-index="${index}" data-photo-id="${photo.photoId || photo.id || index}" data-sort-order="${photo.sortOrder || index + 1}">
+        <div class="photo-item-enhanced" data-photo-index="${index}" data-photo-id="${escapeHtml(photo.photoId || photo.id || index)}" data-sort-order="${photo.sortOrder || index + 1}">
             <!-- Drag Handle - positioned at top left -->
             <div class="drag-handle" draggable="true" onmousedown="event.stopPropagation();" onmouseover="this.style.background='rgba(255,255,255,1)'" onmouseout="this.style.background='rgba(255,255,255,0.9)'">
                 <i class="fas fa-grip-vertical" style="color: #6c757d; font-size: 12px;"></i>
@@ -580,11 +458,11 @@ function updatePhotosGrid() {
             </div>
             
             <div class="photo-image-container">
-                <img src="${photo.thumbnail}" alt="${photo.title || 'Photo'}" loading="lazy" class="photo-img">
+                <img src="${escapeHtml(photo.thumbnail || '')}" alt="${escapeHtml(photo.title || photo.name || 'Photo')}" loading="lazy" class="photo-img">
                 <div class="photo-overlay"></div>
             </div>
             <div class="photo-details-enhanced">
-                <input class="photo-title-enhanced" data-index="${index}" value="${(photo.name || photo.title || '').replace(/"/g, '&quot;')}" placeholder="Enter photo title..." />
+                <input class="photo-title-enhanced" data-index="${index}" value="${escapeHtml(photo.name || photo.title || '')}" placeholder="Enter photo title..." />
                 <div class="photo-metadata">
                     <div class="metadata-row">
                         <div class="metadata-item">
@@ -664,47 +542,40 @@ async function generatePanoramaThumbnail(file, quality = 0.3) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
 
         img.onload = () => {
             const originalWidth = img.naturalWidth;
             const originalHeight = img.naturalHeight;
             
-            // Calculate thumbnail dimensions (max 400px width for thumbnails)
             const maxThumbWidth = 400;
             const thumbWidth = Math.min(maxThumbWidth, originalWidth);
             const thumbHeight = Math.round((thumbWidth / originalWidth) * originalHeight);
 
-            // Set canvas size to thumbnail dimensions
             canvas.width = thumbWidth;
             canvas.height = thumbHeight;
-
-            // Enable image smoothing for thumbnails
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
-
-            // Draw the image scaled to thumbnail size
             ctx.drawImage(img, 0, 0, thumbWidth, thumbHeight);
+            revokeObjectUrl(objectUrl);
 
-            // Convert canvas to WebP Blob with low quality for thumbnail
             canvas.toBlob((blob) => {
                 if (blob) {
                     blob.width = thumbWidth;
                     blob.height = thumbHeight;
-                    console.log(`Panorama thumbnail generated: ${thumbWidth}x${thumbHeight}, size: ${(blob.size / 1024).toFixed(2)}KB`);
                     resolve(blob);
                 } else {
-                    console.error('Failed to create panorama thumbnail blob');
                     resolve(null);
                 }
             }, 'image/webp', quality);
         };
 
         img.onerror = () => {
-            console.error('Failed to load image for thumbnail generation');
+            revokeObjectUrl(objectUrl);
             resolve(null);
         };
 
-        img.src = URL.createObjectURL(file);
+        img.src = objectUrl;
     });
 }
 
@@ -828,11 +699,13 @@ async function uploadPhotos() {
                 
                 // Convert to WebP format
                 const webpBlob = await convertToWebP(photo);
-                
-                // Generate thumbnail
                 const thumbnailBlob = await generateThumbnail(photo);
+
+                if (!webpBlob || !thumbnailBlob) {
+                    showMessage(`Failed to process ${photo.name}`, 'error');
+                    continue;
+                }
                 
-                // Calculate total size
                 totalSize += webpBlob.size + thumbnailBlob.size;
                 
                 processedPhotos.push({
@@ -965,27 +838,6 @@ async function uploadPhotos() {
         // Hide progress
         if (progressDiv) progressDiv.style.display = 'none';
     }
-}
-
-// Edit photo information
-function editPhotoInfo(photoIndex) {
-    const photo = photos[photoIndex];
-    if (!photo) return;
-    
-    const newTitle = prompt('Enter photo title:', photo.title || '');
-    if (newTitle === null) return; // User cancelled
-    
-    const newDescription = prompt('Enter photo description:', photo.description || '');
-    if (newDescription === null) return; // User cancelled
-    
-    // Update photo info
-    photo.title = newTitle.trim();
-    photo.description = newDescription.trim();
-    
-    // Update display
-    updatePhotosGrid();
-    
-    showMessage('Photo information updated. Don\'t forget to save changes!', 'success');
 }
 
 // Delete photo with confirmation
@@ -1427,14 +1279,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Helper function to convert file to base64
-function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = error => reject(error);
-    });
-}
 
 // Check if there are unsaved changes
 function hasUnsavedChanges() {
@@ -1455,9 +1299,9 @@ function hasUnsavedChanges() {
         return true;
     }
     
-    // Check if years have changed
-    const currentYears = currentGalleryYears.sort().join(',');
-    const originalYears = (currentGallery?.years || []).sort().join(',');
+    // Check if years have changed (copy before sort to avoid mutating state)
+    const currentYears = [...currentGalleryYears].sort().join(',');
+    const originalYears = [...(currentGallery?.years || [])].sort().join(',');
     if (currentYears !== originalYears) {
         return true;
     }
@@ -1471,7 +1315,6 @@ window.addNewPhoto = addNewPhoto;
 window.closeUploadModal = closeUploadModal;
 window.handleFileSelect = handleFileSelect;
 window.uploadPhotos = uploadPhotos;
-window.editPhotoInfo = editPhotoInfo;
 window.deletePhotoConfirm = deletePhotoConfirm;
 window.selectCoverPhoto = selectCoverPhoto;
 window.setCoverPhoto = setCoverPhoto;
@@ -1638,8 +1481,8 @@ async function autoSavePhotoOrder() {
 }
 
 function revertPhotoOrderChange() {
-    // Reload photos from server to revert any local changes
-    loadGalleryPhotos();
+    // Reload gallery from server to revert any local changes
+    loadGallery();
 }
 
 async function updatePhotoSortOrder(photosData) {
@@ -2063,8 +1906,13 @@ async function uploadPanorama() {
             if (progressText) progressText.textContent = `Converting ${i + 1}/${totalFiles}: ${panoramaFile.name}...`;
             
             // Convert to WebP format and generate thumbnail
-            const webpBlob = await convertToWebP(panoramaFile, 0.9, true); // Higher quality for panoramas, preserve pixels
-            const thumbnailBlob = await generatePanoramaThumbnail(panoramaFile, 0.3); // Low quality for thumbnail
+            const webpBlob = await convertToWebP(panoramaFile, 0.9, true);
+            const thumbnailBlob = await generatePanoramaThumbnail(panoramaFile, 0.3);
+
+            if (!webpBlob || !thumbnailBlob) {
+                showMessage(`Failed to process panorama: ${panoramaFile.name}`, 'error');
+                continue;
+            }
             
             // Update progress
             const urlProgress = ((i + 0.3) / totalFiles) * 100;

@@ -1,6 +1,3 @@
-// API Configuration for fetching gallery data
-const API_BASE_URL = 'https://5nuxhstp12.execute-api.eu-north-1.amazonaws.com/prod';
-
 // Main Gallery Application Class
 class GalleryPageApp {
     constructor() {
@@ -8,6 +5,7 @@ class GalleryPageApp {
         this.currentGalleryPhotos = [];
         this.currentPhotoIndexValue = 0;
         this.deviceId = null;
+        this.panoramaObserver = null;
         
         // DOM Elements
         this.galleryTitle = document.getElementById('galleryTitle');
@@ -39,36 +37,27 @@ class GalleryPageApp {
     }
 
     async init() {
-        console.log('Initializing gallery page...');
-        
         this.setupNavigation();
         this.setupFullscreenViewer();
-        this.setupPanorama();
         this.initDeviceId();
-        
         await this.loadGallery();
-        
-        console.log('Gallery page initialized successfully');
+    }
+
+    getSortedPhotos() {
+        return sortBySortOrder(this.currentGalleryPhotos);
     }
 
     async loadPhotosFromAPI(galleryId) {
         try {
-            console.log('Loading gallery data from Lambda API...');
-            
-            const response = await fetch(`${API_BASE_URL}/galleries?id=${galleryId}`);
+            const response = await fetch(`${API_BASE_URL}/galleries?id=${encodeURIComponent(galleryId)}`);
             
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const galleryData = await response.json();
-            console.log('Successfully loaded gallery data from API:', galleryData);
-            
             this.photos = galleryData.photos || [];
-            console.log('Loaded photos from API:', this.photos.length);
-
             return galleryData;
-            
         } catch (error) {
             console.error('Error loading photos from API:', error);
             return null;
@@ -78,74 +67,50 @@ class GalleryPageApp {
     async getGalleryData() {
         const galleryId = new URLSearchParams(window.location.search).get('gallery') || null;
         
-        if (galleryId) {
-            console.log('Loading gallery data for ID:', galleryId);
-            
-            const galleryData = await this.loadPhotosFromAPI(galleryId);
-            
-            if (galleryData) {
-                console.log('Successfully loaded gallery data from API');
-                // Get year from years array if available, otherwise fallback to createdAt
-                let year;
-                if (galleryData.years && Array.isArray(galleryData.years) && galleryData.years.length > 0) {
-                    // If multiple years, join them with commas, otherwise use single year
-                    if (galleryData.years.length > 1) {
-                        year = galleryData.years.map(y => parseInt(y)).sort((a, b) => a - b).join(', ');
-                    } else {
-                        year = parseInt(galleryData.years[0]);
-                    }
-                } else {
-                    // Fallback to createdAt year
-                    year = new Date(galleryData.createdAt).getFullYear();
-                }
-                
-                return {
-                    id: galleryData.galleryId || galleryData.id,
-                    name: galleryData.name,
-                    location: `${galleryData.continent}, ${galleryData.country}`,
-                    year: year,
-                    photos: galleryData.photos || [],
-                    description: galleryData.description || '',
-                    panoramaURL: galleryData.panoramaURL || [],
-                };
-            }
+        if (!galleryId) {
+            return { error: 'No gallery specified in the URL.' };
         }
-        
-        // Fallback to default gallery
+
+        const galleryData = await this.loadPhotosFromAPI(galleryId);
+        if (!galleryData) {
+            return { error: 'Failed to load gallery. Please try again later.' };
+        }
+
         return {
-            id: 'default',
-            name: 'Sample Gallery',
-            location: 'Various Locations',
-            year: 2024,
-            photos: [],
-            description: 'A collection of beautiful photographs from around the world.'
+            id: galleryData.galleryId || galleryData.id,
+            name: galleryData.name,
+            location: `${galleryData.continent || ''}, ${galleryData.country || ''}`.replace(/^,\s*|,\s*$/g, ''),
+            year: formatGalleryYears(galleryData),
+            photos: galleryData.photos || [],
+            description: galleryData.description || '',
+            panoramaURL: galleryData.panoramaURL || [],
         };
     }
 
     async loadGallery() {
         try {
             const gallery = await this.getGalleryData();
+
+            if (gallery.error) {
+                document.title = 'Light&Lens - Gallery Not Found';
+                if (this.galleryTitle) this.galleryTitle.textContent = 'Gallery Not Found';
+                if (this.galleryDescription) this.galleryDescription.textContent = gallery.error;
+                if (this.photosGrid) {
+                    this.photosGrid.innerHTML = `<div class="no-photos">${escapeHtml(gallery.error)}</div>`;
+                }
+                if (this.panoramaSection) this.panoramaSection.style.display = 'none';
+                return;
+            }
             
-            // Update page title
             document.title = `Light&Lens - ${gallery.name}`;
-            
-            // Update gallery header
             this.galleryTitle.textContent = gallery.name;
             this.galleryLocation.textContent = gallery.location;
             this.galleryYear.textContent = gallery.year;
             this.photoCount.textContent = gallery.photos.length;
             this.galleryDescription.textContent = gallery.description;
-            
-            // Store photos for full-screen viewer
             this.currentGalleryPhotos = gallery.photos;
-            
-            // Load photos grid
             this.loadPhotosGrid(gallery.photos);
-            
-            // Load panorama if available
             this.loadPanorama(gallery);
-            
-            console.log('Gallery loaded successfully:', gallery.name, 'with', gallery.photos.length, 'photos');
         } catch (error) {
             console.error('Error loading gallery:', error);
             if (this.galleryTitle) this.galleryTitle.textContent = 'Error Loading Gallery';
@@ -154,10 +119,6 @@ class GalleryPageApp {
     }
 
     loadPhotosGrid(photos) {
-        console.log('=== Loading Photos Grid ===');
-        console.log('Photos array length:', photos.length);
-        console.log('First few photos:', photos.slice(0, 3));
-        
         this.photosGrid.innerHTML = '';
         
         if (photos.length === 0) {
@@ -165,25 +126,11 @@ class GalleryPageApp {
             return;
         }
         
-        // Sort photos by sortOrder if available, otherwise by index
-        const sortedPhotos = [...photos].sort((a, b) => {
-            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
-            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
-            return orderA - orderB;
-        });
-        
-        console.log('Photos sorted by sortOrder:', sortedPhotos.map(p => ({
-            id: p.photoId,
-            name: p.name || p.title,
-            sortOrder: p.sortOrder
-        })));
-        
+        const sortedPhotos = sortBySortOrder(photos);
         sortedPhotos.forEach((photo, index) => {
             const photoElement = this.createPhotoElement(photo, index);
             this.photosGrid.appendChild(photoElement);
         });
-        
-        console.log('Photos grid loaded with', this.photosGrid.children.length, 'elements');
     }
 
     createPhotoElement(photo, index) {
@@ -193,26 +140,26 @@ class GalleryPageApp {
         
         const photoId = photo.photoId;
         const currentRating = this.getPhotoRatingFromLocal(photoId);
+        const thumb = escapeHtml(photo.thumbnail || photo.image || '');
+        const alt = escapeHtml(photo.title || photo.name || 'Photo');
         
         photoElement.innerHTML = `
-            <img src="${photo.thumbnail || photo.image}" alt="${photo.title || photo.name}" loading="lazy">
+            <img src="${thumb}" alt="${alt}" loading="lazy">
             <div class="photo-overlay">
                 <div class="photo-info">
                 </div>
             </div>
             <div class="photo-rating">
-                <div class="star-rating" data-photo-id="${photoId}">
+                <div class="star-rating" data-photo-id="${escapeHtml(photoId)}">
                 </div>
             </div>
         `;
         
-        // Create stars dynamically and set up events
         const starRating = photoElement.querySelector('.star-rating');
         if (starRating) {
             this.createStarsWithEvents(starRating, photoId, currentRating);
         }
         
-        // Add click event to open full-screen viewer
         const img = photoElement.querySelector('img');
         if (img) {
             img.addEventListener('click', () => {
@@ -298,27 +245,16 @@ class GalleryPageApp {
 
     // Full-screen viewer methods
     openFullscreenViewer(index) {
-        console.log('Opening fullscreen viewer for index:', index);
-        
-        // Get sorted photos for consistent ordering
-        const sortedPhotos = [...this.currentGalleryPhotos].sort((a, b) => {
-            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
-            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
-            return orderA - orderB;
-        });
+        const sortedPhotos = this.getSortedPhotos();
         
         if (index < 0 || index >= sortedPhotos.length) {
-            console.error('Invalid photo index:', index);
             return;
         }
         
         this.currentPhotoIndexValue = index;
         const photo = sortedPhotos[index];
         
-        if (!this.fullscreenImage) {
-            console.error('Fullscreen image element not found');
-            return;
-        }
+        if (!this.fullscreenImage) return;
         
         this.fullscreenImage.src = photo.image || photo.thumbnail;
         this.fullscreenImage.alt = photo.title || photo.name || 'Photo';
@@ -336,11 +272,8 @@ class GalleryPageApp {
         document.body.classList.add('fullscreen-active');
         document.body.style.overflow = 'hidden';
         
-        // Hide header when fullscreen viewer is active
         const header = document.querySelector('.header');
-        if (header) {
-            header.style.display = 'none';
-        }
+        if (header) header.style.display = 'none';
     }
 
     closeFullscreenViewer() {
@@ -349,35 +282,23 @@ class GalleryPageApp {
         document.body.classList.remove('fullscreen-active');
         document.body.style.overflow = 'auto';
         
-        // Show header when fullscreen viewer is closed
         const header = document.querySelector('.header');
-        if (header) {
-            header.style.display = 'block';
-        }
+        if (header) header.style.display = 'block';
     }
 
     showPreviousPhoto() {
-        const sortedPhotos = [...this.currentGalleryPhotos].sort((a, b) => {
-            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
-            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
-            return orderA - orderB;
-        });
+        const sortedPhotos = this.getSortedPhotos();
         const newIndex = this.currentPhotoIndexValue > 0 ? this.currentPhotoIndexValue - 1 : sortedPhotos.length - 1;
         this.openFullscreenViewer(newIndex);
     }
 
     showNextPhoto() {
-        const sortedPhotos = [...this.currentGalleryPhotos].sort((a, b) => {
-            const orderA = a.sortOrder || Number.MAX_SAFE_INTEGER;
-            const orderB = b.sortOrder || Number.MAX_SAFE_INTEGER;
-            return orderA - orderB;
-        });
+        const sortedPhotos = this.getSortedPhotos();
         const newIndex = this.currentPhotoIndexValue < sortedPhotos.length - 1 ? this.currentPhotoIndexValue + 1 : 0;
         this.openFullscreenViewer(newIndex);
     }
 
     setupFullscreenStarRating(starRatingElement, photoId) {
-        console.log('Setting up fullscreen star rating for photoId:', photoId);
         const currentRating = this.getPhotoRatingFromLocal(photoId);
         this.createStarsWithEvents(starRatingElement, photoId, currentRating);
     }
@@ -411,18 +332,17 @@ class GalleryPageApp {
     }
 
     updateAllPhotoRatings(photoId, rating) {
-        console.log('Updating all photo ratings for:', photoId, 'with rating:', rating);
-        
-        const galleryRatings = document.querySelectorAll(`[data-photo-id="${photoId}"]`);
+        const galleryRatings = document.querySelectorAll(`.star-rating[data-photo-id="${photoId}"]`);
         galleryRatings.forEach(ratingElement => {
             const stars = ratingElement.querySelectorAll('.star');
             this.updateStarDisplay(stars, rating);
         });
         
         const fullscreenRating = document.getElementById('fullscreenStarRating');
-        if (fullscreenRating && this.currentPhotoIndexValue < this.currentGalleryPhotos.length) {
-            const currentPhoto = this.currentGalleryPhotos[this.currentPhotoIndexValue];
-            if (currentPhoto.photoId === photoId) {
+        if (fullscreenRating) {
+            const sortedPhotos = this.getSortedPhotos();
+            const currentPhoto = sortedPhotos[this.currentPhotoIndexValue];
+            if (currentPhoto && currentPhoto.photoId === photoId) {
                 const stars = fullscreenRating.querySelectorAll('.star');
                 this.updateStarDisplay(stars, rating);
             }
@@ -495,7 +415,6 @@ class GalleryPageApp {
 
     // Rating system methods
     async ratePhoto(photoId, rating) {
-        console.log('ratePhoto called with photoId:', photoId, 'rating:', rating);
         try {
             const response = await fetch(`${API_BASE_URL}/galleries?action=rate_photo`, {
                 method: 'POST',
@@ -511,11 +430,9 @@ class GalleryPageApp {
 
             const result = await response.json();
             if (response.ok) {
-                await this.loadPhotoRating(photoId);
                 return result;
-            } else {
-                throw new Error(result.error || 'Failed to rate photo');
             }
+            throw new Error(result.error || 'Failed to rate photo');
         } catch (error) {
             console.error('Error rating photo:', error);
             throw error;
@@ -524,14 +441,13 @@ class GalleryPageApp {
 
     async getPhotoRatingStats(photoId) {
         try {
-            const response = await fetch(`${API_BASE_URL}/galleries?action=get_photo_rating&photoId=${photoId}&deviceId=${this.deviceId}`);
+            const response = await fetch(`${API_BASE_URL}/galleries?action=get_photo_rating&photoId=${encodeURIComponent(photoId)}&deviceId=${encodeURIComponent(this.deviceId)}`);
             const result = await response.json();
             
             if (response.ok) {
                 return result;
-            } else {
-                throw new Error(result.error || 'Failed to get photo rating');
             }
+            throw new Error(result.error || 'Failed to get photo rating');
         } catch (error) {
             console.error('Error getting photo rating:', error);
             throw error;
@@ -554,10 +470,11 @@ class GalleryPageApp {
     }
 
     displayRating(photoId, ratingData) {
-        const ratingElements = document.querySelectorAll(`[data-photo-id="${photoId}"] .star-rating`);
+        const ratingElements = document.querySelectorAll(`.star-rating[data-photo-id="${photoId}"]`);
         
         ratingElements.forEach(ratingElement => {
-            this.updateStarDisplay(ratingElement, ratingData.userRating || 0, ratingData.averageRating);
+            const stars = ratingElement.querySelectorAll('.star');
+            this.updateStarDisplay(stars, ratingData.userRating || 0);
         });
     }
 
@@ -627,51 +544,35 @@ class GalleryPageApp {
 
     // ==================== PANORAMA METHODS ====================
     
-    setupPanorama() {
-        // Panorama setup - no custom controls needed since we're using Pannellum's built-in controls
-    }
-    
     loadPanorama(gallery) {
-        console.log('Loading panorama for gallery:', gallery.name);
-        
-        // Check if gallery has panorama URLs
         if (!gallery.panoramaURL || !Array.isArray(gallery.panoramaURL) || gallery.panoramaURL.length === 0) {
-            console.log('No panorama URLs found for gallery:', gallery.name);
             this.panoramaSection.style.display = 'none';
             return;
         }
         
-        console.log('Found panorama URLs:', gallery.panoramaURL);
-        
-        // Store panorama URLs and reset index
         this.panoramaURLs = gallery.panoramaURL;
         this.currentPanoramaIndex = 0;
-        
-        // Show panorama section
         this.panoramaSection.style.display = 'block';
-        
-        // Initialize panorama viewer with first panorama URL
         this.initializePanoramaViewer(this.panoramaURLs[0]);
     }
     
     initializePanoramaViewer(panoramaUrl) {
-        console.log('Initializing panorama viewer with URL:', panoramaUrl);
-        
         try {
-            // Destroy existing viewer if it exists
             if (this.panoramaViewer) {
                 this.panoramaViewer.destroy();
+                this.panoramaViewer = null;
+            }
+            if (this.panoramaObserver) {
+                this.panoramaObserver.disconnect();
+                this.panoramaObserver = null;
             }
             
-            // Clear the container completely before initializing
             this.panoramaContainer.innerHTML = '';
             
-            // Create panorama navigation buttons if multiple panoramas
             if (this.panoramaURLs.length > 1) {
-                // Panorama counter
                 const counter = document.createElement('div');
                 counter.className = 'panorama-counter';
-                counter.innerHTML = `${this.currentPanoramaIndex + 1} / ${this.panoramaURLs.length}`;
+                counter.textContent = `${this.currentPanoramaIndex + 1} / ${this.panoramaURLs.length}`;
                 counter.style.cssText = `
                     position: absolute;
                     bottom: 5px;
@@ -687,32 +588,27 @@ class GalleryPageApp {
                 `;
                 this.panoramaContainer.appendChild(counter);
                 
-                // Previous button
                 const prevBtn = document.createElement('button');
                 prevBtn.className = 'panorama-nav-btn panorama-nav-prev';
                 prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
                 prevBtn.onclick = () => this.showPreviousPanorama();
                 this.panoramaContainer.appendChild(prevBtn);
                 
-                // Next button
                 const nextBtn = document.createElement('button');
                 nextBtn.className = 'panorama-nav-btn panorama-nav-next';
                 nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
                 nextBtn.onclick = () => this.showNextPanorama();
                 this.panoramaContainer.appendChild(nextBtn);
                 
-                // Store counter reference for updates
                 this.panoramaCounter = counter;
             }
             
-            // Create a new div for the panorama viewer
             const panoramaDiv = document.createElement('div');
             panoramaDiv.id = 'panorama-viewer-' + Date.now();
             panoramaDiv.style.width = '100%';
             panoramaDiv.style.height = '100%';
             this.panoramaContainer.appendChild(panoramaDiv);
             
-            // Initialize new panorama viewer
             this.panoramaViewer = pannellum.viewer(panoramaDiv, {
                 "type": "equirectangular",
                 "panorama": panoramaUrl,
@@ -721,60 +617,27 @@ class GalleryPageApp {
                 "hotSpotDebug": false,
                 "hfov": 100,
                 "mouseZoom": true,
-                "showControls": false, // Disable all built-in controls
-                "showFullscreenCtrl": false, // Disable built-in fullscreen button
+                "showControls": false,
+                "showFullscreenCtrl": false,
                 "showZoomCtrl": false,
                 "keyboardZoom": false,
                 "compass": false,
                 "draggable": true
             });
             
-            // Immediately hide unwanted buttons after initialization
             this.hideUnwantedButtons(panoramaDiv);
-            
-            // Add custom fullscreen button for mobile landscape support
             this.addCustomFullscreenButton(panoramaDiv);
             
-            // Set up observer to hide any buttons that get added later
-            const observer = new MutationObserver((mutations) => {
-                mutations.forEach((mutation) => {
-                    if (mutation.type === 'childList') {
-                        mutation.addedNodes.forEach((node) => {
-                            if (node.nodeType === Node.ELEMENT_NODE) {
-                                this.hideUnwantedButtons(panoramaDiv);
-                            }
-                        });
-                    }
-                });
+            this.panoramaObserver = new MutationObserver(() => {
+                this.hideUnwantedButtons(panoramaDiv);
             });
-            
-            observer.observe(panoramaDiv, {
+            this.panoramaObserver.observe(panoramaDiv, {
                 childList: true,
                 subtree: true
             });
             
-            // Add event listeners
             this.panoramaViewer.on('load', () => {
-                console.log('Panorama loaded successfully');
-                
-                // Immediately hide unwanted buttons
                 this.hideUnwantedButtons(panoramaDiv);
-                
-                // Also hide after a short delay to catch any late-loading elements
-                setTimeout(() => {
-                    this.hideUnwantedButtons(panoramaDiv);
-                }, 100);
-                
-                // Debug check
-                setTimeout(() => {
-                    const fullscreenBtn = panoramaDiv.querySelector('.pnlm-fullscreen-button');
-                    if (fullscreenBtn) {
-                        console.log('Fullscreen button found:', fullscreenBtn);
-                    } else {
-                        console.log('Fullscreen button not found');
-                    }
-                    console.log('All Pannellum elements:', panoramaDiv.querySelectorAll('[class*="pnlm"]'));
-                }, 500);
             });
             
             this.panoramaViewer.on('error', (error) => {
@@ -782,13 +645,10 @@ class GalleryPageApp {
                 this.panoramaContainer.innerHTML = `
                     <div class="panorama-loading">
                         <i class="fas fa-exclamation-triangle"></i>
-                        <p>Failed to load panorama: ${error}</p>
+                        <p>Failed to load panorama</p>
                     </div>
                 `;
             });
-            
-            console.log('Panorama viewer initialized successfully');
-            
         } catch (error) {
             console.error('Error initializing panorama viewer:', error);
             this.panoramaContainer.innerHTML = `
@@ -818,12 +678,11 @@ class GalleryPageApp {
     
     updatePanoramaCounter() {
         if (this.panoramaCounter && this.panoramaURLs.length > 1) {
-            this.panoramaCounter.innerHTML = `${this.currentPanoramaIndex + 1} / ${this.panoramaURLs.length}`;
+            this.panoramaCounter.textContent = `${this.currentPanoramaIndex + 1} / ${this.panoramaURLs.length}`;
         }
     }
     
     hideUnwantedButtons(panoramaDiv) {
-        // Force hide all Pannellum built-in controls including fullscreen button
         const unwantedSelectors = [
             '[class*="zoom"]',
             '.pnlm-plus',
@@ -833,37 +692,16 @@ class GalleryPageApp {
             '.pnlm-zoom-controls',
             '.pnlm-zoom-in',
             '.pnlm-zoom-out',
-            '.pnlm-fullscreen-button', // Hide built-in fullscreen button
-            '.pnlm-controls' // Hide entire controls container
+            '.pnlm-fullscreen-button',
+            '.pnlm-controls'
         ];
         
         unwantedSelectors.forEach(selector => {
-            const elements = panoramaDiv.querySelectorAll(selector);
-            elements.forEach(el => {
-                el.style.display = 'none !important';
-                el.style.visibility = 'hidden !important';
-                el.style.opacity = '0 !important';
+            panoramaDiv.querySelectorAll(selector).forEach(el => {
+                el.style.setProperty('display', 'none', 'important');
+                el.style.setProperty('visibility', 'hidden', 'important');
+                el.style.setProperty('opacity', '0', 'important');
             });
-        });
-        
-        // Hide all control buttons and containers
-        const allControls = panoramaDiv.querySelectorAll('.pnlm-controls, .pnlm-controls > *');
-        allControls.forEach(control => {
-            control.style.display = 'none !important';
-            control.style.visibility = 'hidden !important';
-            control.style.opacity = '0 !important';
-        });
-        
-        // Additional cleanup for any remaining Pannellum elements
-        const allPannellumElements = panoramaDiv.querySelectorAll('[class*="pnlm"]');
-        allPannellumElements.forEach(el => {
-            if (el.classList.contains('pnlm-container') || el.classList.contains('pnlm-canvas')) {
-                // Keep the main container and canvas
-                return;
-            }
-            el.style.display = 'none !important';
-            el.style.visibility = 'hidden !important';
-            el.style.opacity = '0 !important';
         });
     }
     
@@ -914,91 +752,135 @@ class GalleryPageApp {
     
     enterPanoramaFullscreen() {
         if (!this.panoramaContainer) return;
-        
-        console.log('Entering panorama fullscreen');
-        
-        // Add fullscreen class
+
         this.panoramaContainer.classList.add('fullscreen');
         document.body.classList.add('panorama-fullscreen-active');
         document.body.style.overflow = 'hidden';
-        
-        // Hide header
+
         const header = document.querySelector('.header');
         if (header) {
             header.style.display = 'none';
         }
-        
-        // Keep original orientation - no forced landscape
-        
-        // Resize panorama viewer
-        setTimeout(() => {
-            if (this.panoramaViewer && this.panoramaViewer.resize) {
-                this.panoramaViewer.resize();
-            }
-        }, 100);
-        
-        // Update fullscreen button icon
+
+        this.lockLandscapeOrientation();
+
         const fullscreenBtn = this.panoramaContainer.querySelector('.custom-fullscreen-btn');
         if (fullscreenBtn) {
             fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
             fullscreenBtn.title = 'Exit Fullscreen';
         }
-        
-        // Add keyboard listener for ESC key
+
         this.fullscreenKeyHandler = (e) => {
             if (e.key === 'Escape') {
                 this.exitPanoramaFullscreen();
             }
         };
         document.addEventListener('keydown', this.fullscreenKeyHandler);
+
+        this.orientationChangeHandler = () => this.applyLandscapeLayout();
+        window.addEventListener('orientationchange', this.orientationChangeHandler);
+        window.addEventListener('resize', this.orientationChangeHandler);
     }
-    
+
     exitPanoramaFullscreen() {
         if (!this.panoramaContainer) return;
-        
-        console.log('Exiting panorama fullscreen');
-        
-        // Remove fullscreen class
-        this.panoramaContainer.classList.remove('fullscreen');
+
+        this.unlockLandscapeOrientation();
+
+        this.panoramaContainer.classList.remove('fullscreen', 'force-landscape');
         document.body.classList.remove('panorama-fullscreen-active');
         document.body.style.overflow = 'auto';
-        
-        // Show header
+
         const header = document.querySelector('.header');
         if (header) {
             header.style.display = 'block';
         }
-        
-        // No orientation reset needed
-        
-        // Resize panorama viewer
-        setTimeout(() => {
-            if (this.panoramaViewer && this.panoramaViewer.resize) {
-                this.panoramaViewer.resize();
-            }
-        }, 100);
-        
-        // Update fullscreen button icon
+
+        this.resizePanoramaViewer();
+
         const fullscreenBtn = this.panoramaContainer.querySelector('.custom-fullscreen-btn');
         if (fullscreenBtn) {
             fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
             fullscreenBtn.title = 'Fullscreen';
         }
-        
-        // Remove keyboard listener
+
         if (this.fullscreenKeyHandler) {
             document.removeEventListener('keydown', this.fullscreenKeyHandler);
             this.fullscreenKeyHandler = null;
         }
+        if (this.orientationChangeHandler) {
+            window.removeEventListener('orientationchange', this.orientationChangeHandler);
+            window.removeEventListener('resize', this.orientationChangeHandler);
+            this.orientationChangeHandler = null;
+        }
     }
-    
+
     isMobile() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                window.innerWidth <= 768 || ('ontouchstart' in window);
     }
-    
-    // Orientation methods removed - keeping original orientation
-    
+
+    isPortrait() {
+        return window.innerHeight > window.innerWidth;
+    }
+
+    async lockLandscapeOrientation() {
+        // Prefer native fullscreen + orientation lock (Android Chrome, etc.)
+        try {
+            const el = this.panoramaContainer;
+            if (el.requestFullscreen) {
+                await el.requestFullscreen();
+            } else if (el.webkitRequestFullscreen) {
+                await el.webkitRequestFullscreen();
+            }
+        } catch (_) { /* ignore */ }
+
+        try {
+            if (screen.orientation && screen.orientation.lock) {
+                await screen.orientation.lock('landscape');
+            }
+        } catch (_) { /* ignore — common on iOS */ }
+
+        this.applyLandscapeLayout();
+    }
+
+    unlockLandscapeOrientation() {
+        try {
+            if (screen.orientation && screen.orientation.unlock) {
+                screen.orientation.unlock();
+            }
+        } catch (_) { /* ignore */ }
+
+        try {
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                const exit = document.exitFullscreen || document.webkitExitFullscreen;
+                if (exit) exit.call(document);
+            }
+        } catch (_) { /* ignore */ }
+    }
+
+    applyLandscapeLayout() {
+        if (!this.panoramaContainer || !this.panoramaContainer.classList.contains('fullscreen')) {
+            return;
+        }
+
+        // CSS rotate fallback when device is still portrait (iOS / lock unsupported)
+        if (this.isMobile() && this.isPortrait()) {
+            this.panoramaContainer.classList.add('force-landscape');
+        } else {
+            this.panoramaContainer.classList.remove('force-landscape');
+        }
+
+        this.resizePanoramaViewer();
+    }
+
+    resizePanoramaViewer() {
+        setTimeout(() => {
+            if (this.panoramaViewer && this.panoramaViewer.resize) {
+                this.panoramaViewer.resize();
+            }
+        }, 100);
+    }
 }
 
 // Initialize application when DOM is loaded
@@ -1006,23 +888,3 @@ let galleryApp;
 document.addEventListener('DOMContentLoaded', () => {
     galleryApp = new GalleryPageApp();
 });
-
-// Make functions available globally for HTML onclick handlers
-window.openFullscreenViewer = (index) => galleryApp.openFullscreenViewer(index);
-window.closeFullscreenViewer = () => galleryApp.closeFullscreenViewer();
-window.showPreviousPhoto = () => galleryApp.showPreviousPhoto();
-window.showNextPhoto = () => galleryApp.showNextPhoto(); 
-window.showPreviousPanorama = () => galleryApp.showPreviousPanorama();
-window.showNextPanorama = () => galleryApp.showNextPanorama();
-
-// Test functions for panorama fullscreen
-window.testPanoramaFullscreen = () => {
-    if (galleryApp && galleryApp.panoramaContainer) {
-        console.log('Testing panorama fullscreen...');
-        galleryApp.togglePanoramaFullscreen();
-    } else {
-        console.log('No panorama container found. Make sure a panorama is loaded.');
-    }
-};
-
-// Landscape forcing function removed - keeping original orientation 

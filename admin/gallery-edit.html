@@ -55,7 +55,7 @@
                         </div>
                         <div class="form-group">
                             <label>Years</label>
-                            <select id="galleryYearSelect" class="form-control" onchange="handleYearSelect(event, 'gallery')">
+                            <select id="galleryYearSelect" class="form-control">
                                 <option value="">Select Year</option>
                                 <option value="2025">2025</option>
                                 <option value="2024">2024</option>
@@ -128,7 +128,7 @@
                                     <div class="upload-info">
                         <p><i class="fas fa-info-circle"></i> <strong>Upload Guidelines:</strong></p>
                         <ul>
-                            <li>Maximum file size: <strong>50MB per photo</strong></li>
+                            <li>Maximum file size: <strong>300MB per photo</strong></li>
                             <li>Supported formats: JPEG, PNG, WebP, AVIF</li>
                             <li>Images will be automatically converted to WebP format for optimal quality</li>
                             <li>Thumbnails will be generated (40% quality, max 2000px width)</li>
@@ -189,7 +189,7 @@
                         <li>Maximum file size: <strong>300MB per panorama</strong></li>
                         <li>Supported formats: JPEG, PNG, WebP, AVIF</li>
                         <li>Images will be automatically converted to WebP format</li>
-                        <li>No thumbnails generated (full quality panorama only)</li>
+                        <li>Thumbnails are generated for admin grid preview</li>
                         <li>Files will be saved as pano1.webp, pano2.webp, etc.</li>
                         <li>Direct S3 upload using presigned URLs</li>
                     </ul>
@@ -215,9 +215,8 @@
         </div>
     </div>
 
-    <!-- Note: AWS SDK no longer needed for API-based approach -->
-    <!-- <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1001.0.min.js"></script> -->
-    <!-- <script src="gallery-edit.js?v=2.2"></script> -->
+    <script src="../js/shared.js"></script>
+    <script src="gallery-api.js"></script>
     <script src="gallery-edit.js"></script>
 </body>
 </html> 

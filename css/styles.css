@@ -2977,6 +2977,13 @@ button.contact-link span {
 }
 
 /* Copy message animations */
+.no-results {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #7f8c8d;
+    font-size: 1.1rem;
+}
+
 @keyframes slideIn {
     from {
         transform: translateX(100%);
@@ -3058,12 +3065,17 @@ button.contact-link span {
     overflow: hidden !important;
 }
 
-/* Mobile fullscreen - keep original orientation */
-@media screen and (max-width: 768px) {
-    .panorama-container.fullscreen {
-        width: 100vw;
-        height: 100vh;
-    }
+/*
+ * Fallback when Screen Orientation lock is unavailable (e.g. iOS):
+ * visually rotate the fullscreen panorama into landscape while the phone stays portrait.
+ */
+.panorama-container.fullscreen.force-landscape {
+    top: 50%;
+    left: 50%;
+    width: 100vh;
+    height: 100vw;
+    transform: translate(-50%, -50%) rotate(90deg);
+    transform-origin: center center;
 }
 
 /* Custom fullscreen button styles */

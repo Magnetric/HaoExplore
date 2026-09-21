@@ -1,9 +1,4 @@
 // Admin Script - API Version
-// Complete rewrite to use Lambda API instead of direct S3 operations
-
-// ==================== CONFIGURATION ====================
-const API_BASE_URL = 'https://5nuxhstp12.execute-api.eu-north-1.amazonaws.com/prod';
-// TODO: Replace with your actual API Gateway URL after deployment
 
 // Country data by continent
 const countriesByContinent = {
@@ -24,7 +19,7 @@ class AdminPanel {
         this.currentFilteredGalleries = [];
         this.currentGalleryYears = [];
         this.currentPhotoYears = [];
-        this.isProcessing = false;
+        this._filtersBound = false;
     }
 
     // ==================== INITIALIZATION ====================
@@ -42,20 +37,10 @@ class AdminPanel {
             // Load initial data
             await this.loadGalleries();
             
-            // Check URL parameters for tab selection
             const urlParams = new URLSearchParams(window.location.search);
             const tabParam = urlParams.get('tab');
             if (tabParam) {
-                console.log('URL parameter tab found:', tabParam);
                 this.showTab(tabParam);
-            }
-            
-            console.log('Admin panel initialized successfully');
-            console.log('API Base URL:', API_BASE_URL);
-            
-            // Check if API URL is configured
-            if (API_BASE_URL.includes('your-api-id')) {
-                this.showMessage('⚠️ Please update API_BASE_URL in admin-script-api.js with your actual API Gateway URL', 'warning');
             }
         } catch (error) {
             console.error('Error initializing admin panel:', error);
@@ -68,43 +53,21 @@ class AdminPanel {
     async updateGalleriesMetadata() {
         try {
             this.showMessage('Updating galleries metadata from S3...', 'info');
-            this.isProcessing = true;
             
             const result = await this.api.updateGalleriesMetadata();
-            console.log('Galleries metadata updated successfully:', result);
             
-            // Check if a test gallery was created
             if (result.test_gallery_created) {
                 this.showMessage(`✅ Test gallery created! No galleries found in S3. Check debug info for details.`, 'success');
-                
-                // Show debug information in console
-                if (result.debug_info) {
-                    console.log('Debug info:', result.debug_info);
-                    console.log('S3 objects found:', result.debug_info.all_objects);
-                }
             } else {
                 this.showMessage(`✅ Galleries metadata updated successfully! ${result.galleries_updated} updated, ${result.galleries_created} created`, 'success');
             }
             
-            // Show additional information
-            if (result.total_objects_scanned !== undefined) {
-                console.log(`Total objects scanned in S3: ${result.total_objects_scanned}`);
-            }
-            
-            if (result.total_folders_scanned !== undefined) {
-                console.log(`Total gallery folders found: ${result.total_folders_scanned}`);
-            }
-            
-            // Refresh galleries list
             await this.loadGalleries();
-            
             return result;
         } catch (error) {
             console.error('Error updating galleries metadata:', error);
             
-            // Provide more specific error messages
             let errorMessage = '❌ Error updating galleries metadata: ' + error.message;
-            
             if (error.message.includes('Failed to scan S3 bucket')) {
                 errorMessage = '❌ Cannot access S3 bucket. Check AWS permissions and bucket name.';
             } else if (error.message.includes('No gallery folders found')) {
@@ -113,28 +76,20 @@ class AdminPanel {
             
             this.showMessage(errorMessage, 'error');
             throw error;
-        } finally {
-            this.isProcessing = false;
         }
     }
 
     async updatePhotosMetadata() {
         try {
             this.showMessage('Updating photos metadata from S3...', 'info');
-            this.isProcessing = true;
             
             const result = await this.api.updatePhotosMetadata();
-            console.log('Photos metadata updated successfully:', result);
-            
             this.showMessage(`✅ Photos metadata updated successfully! ${result.photos_updated} updated, ${result.photos_created} created`, 'success');
-            
             return result;
         } catch (error) {
             console.error('Error updating photos metadata:', error);
             this.showMessage('❌ Error updating photos metadata: ' + error.message, 'error');
             throw error;
-        } finally {
-            this.isProcessing = false;
         }
     }
 
@@ -220,7 +175,7 @@ class AdminPanel {
             console.log('Loading galleries from API...');
             
             const result = await this.api.listGalleries();
-            this.galleries = result.galleries || [];
+            this.galleries = sortBySortOrder(result.galleries || []);
             this.currentFilteredGalleries = [...this.galleries];
             
             console.log('Loaded galleries from API:', this.galleries.length);
@@ -310,7 +265,7 @@ class AdminPanel {
         
         galleriesGrid.innerHTML = `
             ${processedGalleries.map((gallery, index) => `
-                <div class="gallery-item" data-gallery-id="${gallery.galleryId}" data-sort-order="${gallery.sortOrder || index + 1}" data-thumbnail="${gallery.thumbnailUrl || ''}" style="background: ${gallery.thumbnailUrl ? `url('${gallery.thumbnailUrl}')` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 12px; padding: 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid #e1e8ed; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; position: relative; min-height: 200px;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'" onclick="adminPanel.editGallery('${gallery.galleryId}')">
+                <div class="gallery-item" data-gallery-id="${escapeHtml(gallery.galleryId)}" data-sort-order="${gallery.sortOrder || index + 1}" data-thumbnail="${escapeHtml(gallery.thumbnailUrl || '')}" style="background: ${gallery.thumbnailUrl ? `url('${escapeHtml(gallery.thumbnailUrl)}')` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 12px; padding: 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid #e1e8ed; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; position: relative; min-height: 200px;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'" onclick="adminPanel.editGallery('${escapeHtml(gallery.galleryId)}')">
                     <!-- Overlay for better text readability -->
                     <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); border-radius: 12px;"></div>
                     
@@ -320,7 +275,7 @@ class AdminPanel {
                     </div>
                     
                     <!-- Delete Button - positioned at top right -->
-                    <button onclick="event.stopPropagation(); adminPanel.deleteGalleryConfirm('${gallery.galleryId}')" style="position: absolute; top: 12px; right: 12px; z-index: 3; background: #e74c3c; color: white; border: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.3);" onmouseover="this.style.background='#c0392b'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='#e74c3c'; this.style.transform='scale(1)'">
+                    <button onclick="event.stopPropagation(); adminPanel.deleteGalleryConfirm('${escapeHtml(gallery.galleryId)}')" style="position: absolute; top: 12px; right: 12px; z-index: 3; background: #e74c3c; color: white; border: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.3);" onmouseover="this.style.background='#c0392b'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='#e74c3c'; this.style.transform='scale(1)'">
                         <i class="fas fa-trash"></i>
                     </button>
                     
@@ -331,10 +286,10 @@ class AdminPanel {
                     
                     <!-- Gallery Info - positioned above overlay -->
                     <div style="position: relative; z-index: 2; margin-top: 40px;">
-                        <div style="font-size: 1.1rem; font-weight: 600; color: white; margin-bottom: 0.5rem; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">${gallery.name}</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: white; margin-bottom: 0.5rem; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">${escapeHtml(gallery.name)}</div>
                         
                         <div style="color: rgba(255,255,255,0.9); font-size: 0.9rem; margin-bottom: 0.75rem; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">
-                            ${gallery.continent} > ${gallery.country}
+                            ${escapeHtml(gallery.continent)} > ${escapeHtml(gallery.country)}
                         </div>
                         <div style="color: rgba(255,255,255,0.8); font-size: 0.85rem; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">
                             Photos: ${gallery.photoCount || 0} | Created: ${new Date(gallery.createdAt).toLocaleDateString()}
@@ -435,21 +390,25 @@ class AdminPanel {
     }
     
     reorderGalleries(draggedId, targetId) {
+        const continentFilter = document.getElementById('filterContinent');
+        const countryFilter = document.getElementById('filterCountry');
+        const hasActiveFilters = (continentFilter && continentFilter.value) || (countryFilter && countryFilter.value);
+
+        if (hasActiveFilters) {
+            this.showMessage('⚠️ Clear filters before reordering galleries', 'warning');
+            this.updateGalleriesManageList();
+            return;
+        }
+
         const draggedIndex = this.currentFilteredGalleries.findIndex(g => g.galleryId === draggedId);
         const targetIndex = this.currentFilteredGalleries.findIndex(g => g.galleryId === targetId);
         
         if (draggedIndex === -1 || targetIndex === -1) return;
         
-        // Remove dragged item from array
         const [draggedGallery] = this.currentFilteredGalleries.splice(draggedIndex, 1);
-        
-        // Insert at target position
         this.currentFilteredGalleries.splice(targetIndex, 0, draggedGallery);
         
-        // Update sort order for all galleries
         this.updateSortOrders();
-        
-        // Auto-save the new order
         this.autoSaveGalleryOrder();
     }
     
@@ -627,7 +586,6 @@ class AdminPanel {
     // ==================== FILTER FUNCTIONS ====================
     
     setupFilters() {        
-        // Clear existing options
         const continentFilter = document.getElementById('filterContinent');
         const countryFilter = document.getElementById('filterCountry');
         
@@ -638,8 +596,7 @@ class AdminPanel {
             countryFilter.innerHTML = '<option value="">All Countries</option>';
         }
         
-        // Populate continent filter
-        const continents = [...new Set(this.galleries.map(gallery => gallery.continent))].sort();
+        const continents = [...new Set(this.galleries.map(gallery => gallery.continent).filter(Boolean))].sort();
         continents.forEach(continent => {
             if (continentFilter) {
                 const option = document.createElement('option');
@@ -649,8 +606,7 @@ class AdminPanel {
             }
         });
         
-        // Populate country filter with all countries initially
-        const countries = [...new Set(this.galleries.map(gallery => gallery.country))].sort();
+        const countries = [...new Set(this.galleries.map(gallery => gallery.country).filter(Boolean))].sort();
         countries.forEach(country => {
             if (countryFilter) {
                 const option = document.createElement('option');
@@ -660,15 +616,17 @@ class AdminPanel {
             }
         });
         
-        // Add event listeners
-        if (continentFilter) {
-            continentFilter.addEventListener('change', () => {
-                this.updateCountryFilter();
-                this.filterGalleries();
-            });
-        }
-        if (countryFilter) {
-            countryFilter.addEventListener('change', () => this.filterGalleries());
+        if (!this._filtersBound) {
+            if (continentFilter) {
+                continentFilter.addEventListener('change', () => {
+                    this.updateCountryFilter();
+                    this.filterGalleries();
+                });
+            }
+            if (countryFilter) {
+                countryFilter.addEventListener('change', () => this.filterGalleries());
+            }
+            this._filtersBound = true;
         }
     }
 
@@ -769,10 +727,8 @@ class AdminPanel {
         });
     }
 
-    showCoverPhotoModal(galleryId) {
-        // This method is used to display the cover photo selection modal
-        // For now, it shows a simple message. You can implement the complete modal as needed
-        this.showMessage('Cover photo selection feature coming soon...', 'info');
+    showCoverPhotoModal() {
+        this.showMessage('Please set the cover photo from the gallery edit page.', 'info');
     }
 
     updateCountries() {
@@ -931,72 +887,73 @@ class AdminPanel {
     }
 
     showDeleteConfirmationModal(gallery) {
-        // Create modal HTML
-        const modalHTML = `
-            <div id="deleteConfirmModal" class="modal" style="display: block;">
-                <div class="modal-content" style="max-width: 500px;">
-                    <div class="modal-header">
-                        <h3>Confirm Gallery Deletion</h3>
-                        <button class="modal-close" onclick="adminPanel.closeDeleteConfirmationModal()">
-                            <i class="fas fa-times"></i>
-                        </button>
+        const safeName = escapeHtml(gallery.name);
+        
+        const modal = document.createElement('div');
+        modal.id = 'deleteConfirmModal';
+        modal.className = 'modal';
+        modal.style.display = 'block';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3>Confirm Gallery Deletion</h3>
+                    <button class="modal-close" type="button" data-action="close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div style="margin-bottom: 1.5rem;">
+                        <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                            <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                                <i class="fas fa-exclamation-triangle" style="color: #856404; margin-right: 0.5rem;"></i>
+                                <strong style="color: #856404;">Warning: This action cannot be undone!</strong>
+                            </div>
+                        </div>
+                        <p style="margin-bottom: 1rem;">You are about to delete the gallery <strong>"${safeName}"</strong></p>
+                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                            <p style="margin: 0; font-weight: 600; color: #2c3e50;">This will permanently delete:</p>
+                            <ul style="margin: 0.5rem 0 0 1rem; color: #7f8c8d;">
+                                <li>The gallery and all its metadata</li>
+                                <li>All photos in the gallery (${gallery.photoCount || 0} photos)</li>
+                                <li>All associated years and descriptions</li>
+                            </ul>
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label for="confirmGalleryName" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                                Type the gallery name "${safeName}" to confirm:
+                            </label>
+                            <input type="text" id="confirmGalleryName"
+                                   style="width: 100%; padding: 8px; border: 2px solid #e1e8ed; border-radius: 4px;"
+                                   placeholder="Type gallery name here..."
+                                   autocomplete="off">
+                        </div>
                     </div>
-                    <div class="modal-body">
-                        <div style="margin-bottom: 1.5rem;">
-                            <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                                <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
-                                    <i class="fas fa-exclamation-triangle" style="color: #856404; margin-right: 0.5rem;"></i>
-                                    <strong style="color: #856404;">Warning: This action cannot be undone!</strong>
-                                </div>
-                            </div>
-                            
-                            <p style="margin-bottom: 1rem;">You are about to delete the gallery <strong>"${gallery.name}"</strong></p>
-                            
-                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                                <p style="margin: 0; font-weight: 600; color: #2c3e50;">This will permanently delete:</p>
-                                <ul style="margin: 0.5rem 0 0 1rem; color: #7f8c8d;">
-                                    <li>The gallery and all its metadata</li>
-                                    <li>All photos in the gallery (${gallery.photoCount || 0} photos)</li>
-                                    <li>All associated years and descriptions</li>
-                                </ul>
-                            </div>
-                            
-                            <div style="margin-bottom: 1rem;">
-                                <label for="confirmGalleryName" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
-                                    Type the gallery name "${gallery.name}" to confirm:
-                                </label>
-                                <input type="text" id="confirmGalleryName" 
-                                       style="width: 100%; padding: 8px; border: 2px solid #e1e8ed; border-radius: 4px;" 
-                                       placeholder="Type gallery name here..."
-                                       autocomplete="off">
-                            </div>
-                        </div>
-                        
-                        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-                            <button type="button" onclick="adminPanel.closeDeleteConfirmationModal()" 
-                                    style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">
-                                Cancel
-                            </button>
-                            <button type="button" id="confirmDeleteBtn" onclick="adminPanel.proceedWithDeletion('${gallery.galleryId}', '${gallery.name}')" 
-                                    style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;" 
-                                    disabled>
-                                <i class="fas fa-trash"></i> Delete Gallery
-                            </button>
-                        </div>
+                    <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                        <button type="button" data-action="close"
+                                style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">
+                            Cancel
+                        </button>
+                        <button type="button" id="confirmDeleteBtn"
+                                style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;"
+                                disabled>
+                            <i class="fas fa-trash"></i> Delete Gallery
+                        </button>
                     </div>
                 </div>
             </div>
         `;
         
-        // Add modal to page
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        document.body.appendChild(modal);
         
-        // Add input validation
+        modal.querySelectorAll('[data-action="close"]').forEach(btn => {
+            btn.addEventListener('click', () => this.closeDeleteConfirmationModal());
+        });
+        
         const nameInput = document.getElementById('confirmGalleryName');
         const deleteBtn = document.getElementById('confirmDeleteBtn');
         
-        nameInput.addEventListener('input', function() {
-            if (this.value === gallery.name) {
+        nameInput.addEventListener('input', () => {
+            if (nameInput.value === gallery.name) {
                 deleteBtn.disabled = false;
                 deleteBtn.style.opacity = '1';
             } else {
@@ -1004,8 +961,11 @@ class AdminPanel {
                 deleteBtn.style.opacity = '0.6';
             }
         });
+
+        deleteBtn.addEventListener('click', () => {
+            this.proceedWithDeletion(gallery.galleryId, gallery.name);
+        });
         
-        // Focus on input
         setTimeout(() => nameInput.focus(), 100);
     }
 
@@ -1019,7 +979,7 @@ class AdminPanel {
     async proceedWithDeletion(galleryId, galleryName) {
         const nameInput = document.getElementById('confirmGalleryName');
         
-        if (nameInput.value !== galleryName) {
+        if (!nameInput || nameInput.value !== galleryName) {
             this.showMessage('❌ Gallery name does not match. Deletion cancelled.', 'warning');
             return;
         }
@@ -1033,209 +993,11 @@ class AdminPanel {
     }
 }
 
-// ==================== API CLIENT CLASS ====================
-class GalleryAPI {
-    constructor(baseUrl) {
-        this.baseUrl = baseUrl;
-    } 
-
-    async createGallery(galleryData) {
-        try {
-            const requestBody = {
-                name: galleryData.name,
-                continent: galleryData.continent,
-                country: galleryData.country,
-                description: galleryData.description || '',
-                years: galleryData.years || []
-            };
-            
-            // Add coordinates if available
-            if (galleryData.latitude && galleryData.longitude) {
-                requestBody.latitude = galleryData.latitude;
-                requestBody.longitude = galleryData.longitude;
-            }
-            
-            const response = await fetch(`${this.baseUrl}/galleries`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to create gallery');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error creating gallery:', error);
-            throw error;
-        }
-    }
-
-    async listGalleries() {
-        try {
-            const response = await fetch(`${this.baseUrl}/galleries`);
-            
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to list galleries');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error listing galleries:', error);
-            throw error;
-        }
-    }
-
-    async getGallery(galleryId) {
-        try {
-            const response = await fetch(`${this.baseUrl}/galleries?id=${galleryId}`);
-            
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to get gallery');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error getting gallery:', error);
-            throw error;
-        }
-    }
-
-    async updateGallery(galleryData) {
-        try {
-            const response = await fetch(`${this.baseUrl}/galleries`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(galleryData)
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to update gallery');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error updating gallery:', error);
-            throw error;
-        }
-    }
-
-    async deleteGallery(galleryId) {
-        try {
-            console.log('API deleteGallery called with galleryId:', galleryId);
-            const url = `${this.baseUrl}/galleries?id=${galleryId}`;
-            console.log('DELETE request URL:', url);
-            
-            const response = await fetch(url, {
-                method: 'DELETE'
-            });
-            
-            console.log('DELETE response status:', response.status);
-            console.log('DELETE response ok:', response.ok);
-            
-            if (!response.ok) {
-                const error = await response.json();
-                console.log('DELETE error response:', error);
-                throw new Error(error.error || 'Failed to delete gallery');
-            }
-
-            const result = await response.json();
-            console.log('DELETE success response:', result);
-            return result;
-        } catch (error) {
-            console.error('Error deleting gallery:', error);
-            throw error;
-        }
-    }
-
-    async updateGalleriesMetadata() {
-        try {
-            const response = await fetch(`${this.baseUrl}/galleries?action=update_galleries_metadata`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({})
-            });
-            
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to update galleries metadata');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error updating galleries metadata:', error);
-            throw error;
-        }
-    }
-
-    async updatePhotosMetadata() {
-        try {
-            const response = await fetch(`${this.baseUrl}/galleries?action=update_GalleryPhotos`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({})
-            });
-            
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to update photos metadata');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error updating photos metadata:', error);
-            throw error;
-        }
-    }
-    
-    async updateGallerySortOrder(galleriesData) {
-        try {
-            const response = await fetch(`${this.baseUrl}/galleries?action=update_sort_order`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    galleries: galleriesData
-                })
-            });
-            
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to update gallery sort order');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error updating gallery sort order:', error);
-            throw error;
-        }
-    }
-}
-
-// ==================== GLOBAL INSTANCE ====================
 const adminPanel = new AdminPanel();
 
-// ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
     adminPanel.init();
 });
-
-// ==================== GLOBAL FUNCTIONS FOR HTML ONCLICK ====================
-// These functions are needed for HTML onclick handlers to work properly
 
 window.showTab = (tabName) => adminPanel.showTab(tabName);
 window.editGallery = (galleryId) => adminPanel.editGallery(galleryId);
@@ -1244,9 +1006,7 @@ window.closeDeleteConfirmModal = () => adminPanel.closeDeleteConfirmationModal()
 window.proceedWithDeletion = (galleryId, galleryName) => adminPanel.proceedWithDeletion(galleryId, galleryName);
 window.copyGalleryId = (galleryId) => adminPanel.copyGalleryId(galleryId);
 window.showCoverPhotoModal = (galleryId) => adminPanel.showCoverPhotoModal(galleryId);
-// removed for rewrite; buttons should be updated to new handlers when implemented
 window.updateCountries = () => adminPanel.updateCountries();
 window.addYear = (type) => adminPanel.addYear(type);
 window.removeYear = (type, year) => adminPanel.removeYear(type, year);
-// Filter functions
 window.clearFilters = () => adminPanel.clearFilters();
