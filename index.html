@@ -25,31 +25,37 @@
                     <span></span>
                 </button>
                 <ul class="nav-menu" id="navMenu">
-                    <li><a href="#home" class="nav-link active">Home</a></li>
-                    <li><a href="#gallery" class="nav-link">Gallery</a></li>
-                    <li><a href="#map" class="nav-link">Map</a></li>
-                    <li><a href="#contact" class="nav-link">Contact</a></li>
+                    <li><a href="#home" class="nav-link active" data-i18n="navHome">Home</a></li>
+                    <li><a href="#gallery" class="nav-link" data-i18n="navGallery">Gallery</a></li>
+                    <li><a href="#map" class="nav-link" data-i18n="navMap">Map</a></li>
+                    <li><a href="#contact" class="nav-link" data-i18n="navContact">Contact</a></li>
                 </ul>
             </nav>
+            <div class="header-actions">
             <div class="subscribe-container">
                 <button class="subscribe-btn" id="subscribeBtn">
                     <i class="fas fa-bell"></i>
-                    <span>Subscribe</span>
+                    <span data-i18n="subscribe">Subscribe</span>
                 </button>
                 <div class="subscribe-dropdown" id="subscribeDropdown">
                     <div class="subscribe-dropdown-content">
-                        <p class="subscribe-description">Subscribe to receive notifications when new galleries are added.</p>
+                        <p class="subscribe-description" data-i18n="subscribeDesc">Subscribe to receive notifications when new galleries are added.</p>
                         <form class="subscribe-form" id="subscribeForm">
                             <div class="form-group">
-                                <input type="email" id="subscribeEmail" name="email" placeholder="Enter your email address" required>
+                                <input type="email" id="subscribeEmail" name="email" data-i18n-placeholder="emailPlaceholder" placeholder="Enter your email address" required>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">Subscribe</button>
-                                <button type="button" class="btn btn-secondary" id="subscribeCancel">Cancel</button>
+                                <button type="submit" class="btn btn-primary" data-i18n="subscribe">Subscribe</button>
+                                <button type="button" class="btn btn-secondary" id="subscribeCancel" data-i18n="cancel">Cancel</button>
                             </div>
                         </form>
                     </div>
                 </div>
+            </div>
+            <div class="lang-switch" role="group" aria-label="Language">
+                <button type="button" class="lang-btn active" data-lang="en">EN</button>
+                <button type="button" class="lang-btn" data-lang="zh">中文</button>
+            </div>
             </div>
         </div>
         
@@ -60,9 +66,9 @@
         <section id="home" class="hero">
             <div class="container">
                 <div class="hero-content">
-                    <h1 class="hero-title">Capturing Moments</h1>
-                    <p class="hero-subtitle">The Story of Light and Shadow</p>
-                    <a href="#gallery" class="btn btn-primary">Explore Gallery</a>
+                    <h1 class="hero-title" data-i18n="heroTitle">Capturing Moments</h1>
+                    <p class="hero-subtitle" data-i18n="heroSubtitle">The Story of Light and Shadow</p>
+                    <a href="#gallery" class="btn btn-primary" data-i18n="exploreGallery">Explore Gallery</a>
 
                     <!-- Social Media Links -->
                     <div class="social-links">
@@ -94,18 +100,18 @@
             <div class="container">
                 <div class="filter-controls">
                     <div class="filter-group">
-                        <label for="yearFilter">Year:</label>
+                        <label for="yearFilter" data-i18n="year">Year:</label>
                         <select id="yearFilter" class="filter-select">
-                            <option value="">All Years</option>
+                            <option value="" data-i18n="allYears">All Years</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label for="locationFilter">Location:</label>
+                        <label for="locationFilter" data-i18n="location">Location:</label>
                         <select id="locationFilter" class="filter-select">
-                            <option value="">All Locations</option>
+                            <option value="" data-i18n="allLocations">All Locations</option>
                         </select>
                     </div>
-                    <button id="clearFilters" class="btn btn-secondary">Clear Filters</button>
+                    <button id="clearFilters" class="btn btn-secondary" data-i18n="clearFilters">Clear Filters</button>
                 </div>
             </div>
         </section>
@@ -119,7 +125,7 @@
                 <div class="gallery-load-more" id="galleryLoadMore" style="display: none;">
                     <button class="btn btn-primary load-more-btn" id="loadMoreBtn">
                         <i class="fas fa-arrow-down"></i>
-                        <span>Load More</span>
+                        <span data-i18n="loadMore">Load More</span>
                     </button>
                 </div>
             </div>
@@ -135,9 +141,9 @@
                             <!-- Year options will be generated here dynamically -->
                         </div>
                     </div>
-                    <button class="show-filter-btn" onclick="toggleYearFilter()" title="Show Year Filter">
+                    <button class="show-filter-btn" onclick="toggleYearFilter()" data-i18n-title="showYearFilter" title="Show Year Filter">
                         <i class="fas fa-filter"></i>
-                        <span>Year Filter</span>
+                        <span data-i18n="yearFilter">Year Filter</span>
                     </button>
                     <div class="loading-overlay" id="loadingOverlay">
                         <div class="loading-spinner"></div>
@@ -151,8 +157,8 @@
             <div class="container">
                 <div class="contact-content">
                     <div class="contact-header">
-                        <h2 class="contact-title">Let's Connect</h2>
-                        <div class="contact-subtitle">Photographer & Visual Storyteller</div>
+                        <h2 class="contact-title" data-i18n="letsConnect">Let's Connect</h2>
+                        <div class="contact-subtitle" data-i18n="contactRole">Photographer & Visual Storyteller</div>
                     </div>
                     
                     <div class="contact-grid">
@@ -167,9 +173,9 @@
                                 <div class="contact-icon">
                                     <i class="fas fa-handshake"></i>
                                 </div>
-                                <h3>Let's Collaborate</h3>
-                                <p>I’m passionate about photography, with a special love for landscapes and urban storytelling.</p>
-                                <p>Always open to creative collaborations—let’s bring ideas to life together.</p>
+                                <h3 data-i18n="collaborate">Let's Collaborate</h3>
+                                <p data-i18n="collaborateP1">I’m passionate about photography, with a special love for landscapes and urban storytelling.</p>
+                                <p data-i18n="collaborateP2">Always open to creative collaborations—let’s bring ideas to life together.</p>
                                 
                                 <div class="contact-links">
                                     <a href="mailto:xuhao.cth@gmail.com" class="contact-link">
@@ -182,7 +188,7 @@
                                     </a>
                                     <a href="https://www.xiaohongshu.com/user/profile/5b32f7b311be1071312c59cc" target="_blank" class="contact-link">
                                         <i class="fas fa-book-open"></i>
-                                        <span>Xiaohongshu</span>
+                                        <span data-i18n="xiaohongshu">Xiaohongshu</span>
                                     </a>
                                     <a href="https://www.linkedin.com/in/hao-xu-b277231b8/" target="_blank" class="contact-link">
                                         <i class="fab fa-linkedin"></i>
@@ -190,7 +196,7 @@
                                     </a>
                                     <button class="contact-link" onclick="copyWechat()">
                                         <i class="fab fa-weixin"></i>
-                                        <span>Wechat</span>
+                                        <span data-i18n="wechat">Wechat</span>
                                     </button>
                                 </div>
                             </div>
@@ -207,11 +213,12 @@
 
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2025 Light&Lens. All rights reserved.</p>
+            <p data-i18n="footer">&copy; 2025 Light&Lens. All rights reserved.</p>
         </div>
     </footer>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/i18n.js"></script>
     <script src="js/shared.js"></script>
     <script src="js/script.js"></script>
 </body>

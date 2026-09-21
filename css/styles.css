@@ -133,6 +133,46 @@ body {
     font-size: 0.8rem;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: 20px;
+}
+
+.header-actions .subscribe-container {
+    margin-left: 0;
+}
+
+.lang-switch {
+    display: flex;
+    align-items: center;
+    border: 1px solid #d5dde3;
+    border-radius: 20px;
+    overflow: hidden;
+    background: #fff;
+}
+
+.lang-btn {
+    border: none;
+    background: transparent;
+    color: #5d6d7e;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.lang-btn.active {
+    background: #2c3e50;
+    color: #fff;
+}
+
+body.lang-zh {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", Inter, sans-serif;
+}
+
 /* Subscribe Dropdown Styles */
 .subscribe-dropdown {
     position: absolute;
@@ -317,6 +357,16 @@ body {
 @media (max-width: 768px) {
     .subscribe-container {
         margin-left: 15px;
+    }
+
+    .header-actions {
+        margin-left: 8px;
+        gap: 8px;
+    }
+
+    .lang-btn {
+        padding: 6px 8px;
+        font-size: 0.75rem;
     }
     
     .subscribe-btn {

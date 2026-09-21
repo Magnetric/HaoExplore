@@ -68,22 +68,24 @@ class GalleryPageApp {
         const galleryId = new URLSearchParams(window.location.search).get('gallery') || null;
         
         if (!galleryId) {
-            return { error: 'No gallery specified in the URL.' };
+            return { error: t('noGalleryId') };
         }
 
         const galleryData = await this.loadPhotosFromAPI(galleryId);
         if (!galleryData) {
-            return { error: 'Failed to load gallery. Please try again later.' };
+            return { error: t('galleryLoadFailed') };
         }
 
         return {
             id: galleryData.galleryId || galleryData.id,
             name: galleryData.name,
-            location: `${galleryData.continent || ''}, ${galleryData.country || ''}`.replace(/^,\s*|,\s*$/g, ''),
+            location: [tPlace(galleryData.continent || ''), galleryData.country || ''].filter(Boolean).join(', '),
             year: formatGalleryYears(galleryData),
             photos: galleryData.photos || [],
             description: galleryData.description || '',
             panoramaURL: galleryData.panoramaURL || [],
+            continent: galleryData.continent || '',
+            country: galleryData.country || '',
         };
     }
 
@@ -93,7 +95,7 @@ class GalleryPageApp {
 
             if (gallery.error) {
                 document.title = 'Light&Lens - Gallery Not Found';
-                if (this.galleryTitle) this.galleryTitle.textContent = 'Gallery Not Found';
+                if (this.galleryTitle) this.galleryTitle.textContent = t('galleryNotFound');
                 if (this.galleryDescription) this.galleryDescription.textContent = gallery.error;
                 if (this.photosGrid) {
                     this.photosGrid.innerHTML = `<div class="no-photos">${escapeHtml(gallery.error)}</div>`;
@@ -109,12 +111,14 @@ class GalleryPageApp {
             this.photoCount.textContent = gallery.photos.length;
             this.galleryDescription.textContent = gallery.description;
             this.currentGalleryPhotos = gallery.photos;
+            this.placeContinent = gallery.continent || '';
+            this.placeCountry = gallery.country || '';
             this.loadPhotosGrid(gallery.photos);
             this.loadPanorama(gallery);
         } catch (error) {
             console.error('Error loading gallery:', error);
-            if (this.galleryTitle) this.galleryTitle.textContent = 'Error Loading Gallery';
-            if (this.galleryDescription) this.galleryDescription.textContent = 'Failed to load gallery data. Please try again.';
+            if (this.galleryTitle) this.galleryTitle.textContent = t('errorLoadingGallery');
+            if (this.galleryDescription) this.galleryDescription.textContent = t('galleryLoadError');
         }
     }
 
@@ -122,7 +126,7 @@ class GalleryPageApp {
         this.photosGrid.innerHTML = '';
         
         if (photos.length === 0) {
-            this.photosGrid.innerHTML = '<div class="no-photos">No photos found in this gallery.</div>';
+            this.photosGrid.innerHTML = `<div class="no-photos">${t('noPhotos')}</div>`;
             return;
         }
         
@@ -197,13 +201,13 @@ class GalleryPageApp {
                     this.updateAllPhotoRatings(photoId, newRating);
                     
                     if (newRating === 0) {
-                        this.showRatingMessage('Rating cancelled successfully!', 'success');
+                        this.showRatingMessage(t('ratingCancelled'), 'success');
                     } else {
-                        this.showRatingMessage('Rating saved successfully!', 'success');
+                        this.showRatingMessage(t('ratingSaved'), 'success');
                     }
                 } catch (error) {
                     console.error('Failed to save rating:', error);
-                    this.showRatingMessage('Failed to save rating. Please try again.', 'error');
+                    this.showRatingMessage(t('ratingFailed'), 'error');
                 }
             });
             
@@ -645,7 +649,7 @@ class GalleryPageApp {
                 this.panoramaContainer.innerHTML = `
                     <div class="panorama-loading">
                         <i class="fas fa-exclamation-triangle"></i>
-                        <p>Failed to load panorama</p>
+                        <p>${t('panoramaFailed')}</p>
                     </div>
                 `;
             });
@@ -654,7 +658,7 @@ class GalleryPageApp {
             this.panoramaContainer.innerHTML = `
                 <div class="panorama-loading">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <p>Failed to load panorama</p>
+                    <p>${t('panoramaFailed')}</p>
                 </div>
             `;
         }
@@ -710,7 +714,7 @@ class GalleryPageApp {
         const fullscreenBtn = document.createElement('button');
         fullscreenBtn.className = 'custom-fullscreen-btn';
         fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
-        fullscreenBtn.title = 'Fullscreen';
+        fullscreenBtn.title = t('fullscreen');
         fullscreenBtn.style.cssText = `
             position: absolute;
             top: 5px;
@@ -767,7 +771,7 @@ class GalleryPageApp {
         const fullscreenBtn = this.panoramaContainer.querySelector('.custom-fullscreen-btn');
         if (fullscreenBtn) {
             fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
-            fullscreenBtn.title = 'Exit Fullscreen';
+            fullscreenBtn.title = t('exitFullscreen');
         }
 
         this.fullscreenKeyHandler = (e) => {
@@ -810,7 +814,7 @@ class GalleryPageApp {
         const fullscreenBtn = this.panoramaContainer.querySelector('.custom-fullscreen-btn');
         if (fullscreenBtn) {
             fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
-            fullscreenBtn.title = 'Fullscreen';
+            fullscreenBtn.title = t('fullscreen');
         }
 
         if (this.fullscreenKeyHandler) {
@@ -1018,4 +1022,16 @@ class GalleryPageApp {
 let galleryApp;
 document.addEventListener('DOMContentLoaded', () => {
     galleryApp = new GalleryPageApp();
+});
+
+window.addEventListener('langchange', () => {
+    if (!galleryApp) return;
+    if (galleryApp.galleryLocation) {
+        galleryApp.galleryLocation.textContent = [tPlace(galleryApp.placeContinent || ''), galleryApp.placeCountry || ''].filter(Boolean).join(', ');
+    }
+    const fullscreenBtn = galleryApp.panoramaContainer && galleryApp.panoramaContainer.querySelector('.custom-fullscreen-btn');
+    if (fullscreenBtn) {
+        const expanded = galleryApp.panoramaContainer.classList.contains('fullscreen');
+        fullscreenBtn.title = t(expanded ? 'exitFullscreen' : 'fullscreen');
+    }
 });

@@ -72,7 +72,7 @@ class PhotoGalleryApp {
         this.currentDisplayCount = this.getInitialDisplayCount(); // Calculate initial display count based on screen size
         
         if (this.currentFilteredGalleries.length === 0) {
-            this.galleryGrid.innerHTML = '<div class="no-results">No galleries found matching your criteria.</div>';
+            this.galleryGrid.innerHTML = `<div class="no-results">${t('noGalleries')}</div>`;
             this.galleryLoadMore.style.display = 'none';
             return;
         }
@@ -130,7 +130,7 @@ class PhotoGalleryApp {
         this.isLoadingMore = true;
 
         this.loadMoreBtn.classList.add('loading');
-        this.loadMoreBtn.innerHTML = '<i class="fas fa-spinner"></i><span>Loading...</span>';
+        this.loadMoreBtn.innerHTML = `<i class="fas fa-spinner"></i><span>${t('loading')}</span>`;
         
         const previousCount = this.currentDisplayCount;
         this.currentDisplayCount += this.getItemsPerLoad();
@@ -145,7 +145,7 @@ class PhotoGalleryApp {
         
         this.updateLoadMoreButton();
         this.loadMoreBtn.classList.remove('loading');
-        this.loadMoreBtn.innerHTML = '<i class="fas fa-arrow-down"></i><span>Load More</span>';
+        this.loadMoreBtn.innerHTML = `<i class="fas fa-arrow-down"></i><span>${t('loadMore')}</span>`;
         this.isLoadingMore = false;
     }
     
@@ -212,12 +212,12 @@ class PhotoGalleryApp {
         // Validate email
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
-            this.showSubscribeMessage('Please enter a valid email address.', 'error');
+            this.showSubscribeMessage(t('invalidEmail'), 'error');
             return;
         }
 
         // Show loading state
-        this.showSubscribeMessage('Subscribing...', 'info');
+        this.showSubscribeMessage(t('subscribing'), 'info');
         
         try {
             const response = await fetch(`${API_BASE_URL}/subscribe`, {
@@ -231,7 +231,7 @@ class PhotoGalleryApp {
             const data = await response.json();
             
             if (response.ok) {
-                this.showSubscribeMessage(data.message || 'Successfully subscribed!', 'success');
+                this.showSubscribeMessage(getLang() === 'zh' ? t('subscribeSuccess') : (data.message || t('subscribeSuccess')), 'success');
                 
                 // Close dropdown and reset form
                 const subscribeDropdown = document.getElementById('subscribeDropdown');
@@ -245,7 +245,7 @@ class PhotoGalleryApp {
             }
         } catch (error) {
             console.error('Error subscribing:', error);
-            this.showSubscribeMessage('Network error. Please check your connection and try again.', 'error');
+            this.showSubscribeMessage(t('subscribeNetwork'), 'error');
         }
     }
 
@@ -295,7 +295,7 @@ class PhotoGalleryApp {
         article.setAttribute('data-index', index);
         
         const coverImage = escapeHtml(gallery.coverPhotoURL || 'images/homephoto.webp');
-        const location = escapeHtml(gallery.continent || '');
+        const location = escapeHtml(tPlace(gallery.continent || ''));
         const year = escapeHtml(formatGalleryYears(gallery));
         const photoCount = gallery.photoCount || 0;
         const name = escapeHtml(gallery.name || '');
@@ -307,7 +307,7 @@ class PhotoGalleryApp {
                 <div class="gallery-meta">
                     <span><i class="fas fa-map-marker-alt"></i> ${location}</span>
                     <span><i class="fas fa-calendar"></i> ${year}</span>
-                    <span><i class="fas fa-images"></i> ${photoCount} photos</span>
+                    <span><i class="fas fa-images"></i> ${t('photoCount', { n: photoCount })}</span>
                 </div>
             </div>
         `;
@@ -319,8 +319,8 @@ class PhotoGalleryApp {
     }
 
     setupFilters() {
-        this.yearFilter.innerHTML = '<option value="">All Years</option>';
-        this.locationFilter.innerHTML = '<option value="">All Locations</option>';
+        this.yearFilter.innerHTML = `<option value="">${t('allYears')}</option>`;
+        this.locationFilter.innerHTML = `<option value="">${t('allLocations')}</option>`;
         
         const years = collectYearsFromGalleries(galleries);
         years.forEach(year => {
@@ -334,7 +334,7 @@ class PhotoGalleryApp {
         locations.forEach(location => {
             const option = document.createElement('option');
             option.value = location;
-            option.textContent = location;
+            option.textContent = tPlace(location);
             this.locationFilter.appendChild(option);
         });
         
@@ -460,6 +460,20 @@ class PhotoGalleryApp {
             });
         }
         this.galleryMap.init();
+    }
+
+    onLanguageChange() {
+        const year = this.yearFilter.value;
+        const location = this.locationFilter.value;
+        this.setupFilters();
+        this.yearFilter.value = year;
+        this.locationFilter.value = location;
+        this.displayGalleries();
+        this.updateLoadMoreButton();
+        if (this.loadMoreBtn && !this.isLoadingMore) {
+            this.loadMoreBtn.innerHTML = `<i class="fas fa-arrow-down"></i><span>${t('loadMore')}</span>`;
+        }
+        if (this.galleryMap) this.galleryMap.refreshLanguage();
     }
 }
 
@@ -761,7 +775,7 @@ class GalleryMap {
         if (loadingOverlay) {
             loadingOverlay.innerHTML = `
                 <div class="loading-spinner"></div>
-                <div class="loading-text">Loading gallery markers...</div>
+                <div class="loading-text">${t('loadingMarkers')}</div>
                 <div class="loading-progress">
                     <span id="markerProgress">0</span> / <span id="totalMarkers">${galleries.length}</span>
                 </div>
@@ -891,7 +905,7 @@ class GalleryMap {
     createPopupContent(gallery) {
         const coverImage = escapeHtml(gallery.coverPhotoURL || 'images/homephoto.webp');
         const name = escapeHtml(gallery.name || '');
-        const continent = escapeHtml(gallery.continent || '');
+        const continent = escapeHtml(tPlace(gallery.continent || ''));
         const country = escapeHtml(gallery.country || '');
         const galleryId = escapeHtml(gallery.galleryId || gallery.id || '');
         
@@ -906,12 +920,12 @@ class GalleryMap {
                 <div class="popup-content">
                     <div class="popup-info">
                         <p class="location"><i class="fas fa-map-marker-alt"></i> ${continent} > ${country}</p>
-                        <p class="photos"><i class="fas fa-images"></i> ${gallery.photoCount || 0} photos</p>
+                        <p class="photos"><i class="fas fa-images"></i> ${t('photoCount', { n: gallery.photoCount || 0 })}</p>
                     </div>
                 <button onclick="app.galleryMap.openGallery('${galleryId}')" 
                             class="popup-button">
                         <i class="fas fa-external-link-alt"></i>
-                    View Gallery
+                    ${t('viewGallery')}
                 </button>
                 </div>
             </div>
@@ -935,6 +949,16 @@ class GalleryMap {
             loadingOverlay.style.display = 'none';
         }
     }
+
+    refreshLanguage() {
+        this.markers.forEach(marker => {
+            if (marker.galleryData) {
+                marker.setPopupContent(this.createPopupContent(marker.galleryData));
+            }
+        });
+        const loadingText = document.querySelector('#loadingOverlay .loading-text');
+        if (loadingText) loadingText.textContent = t('loadingMarkers');
+    }
 }
 
 // Initialize application when DOM is loaded
@@ -943,14 +967,18 @@ document.addEventListener('DOMContentLoaded', () => {
     app = new PhotoGalleryApp();
 });
 
+window.addEventListener('langchange', () => {
+    if (app) app.onLanguageChange();
+});
+
 function copyWechat() {
     const wechatId = 'Magnetrician';
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(wechatId).then(() => {
-            showCopyToast('Wechat ID copied', 'success');
+            showCopyToast(t('wechatCopied'), 'success');
         }).catch(() => {
-            showCopyToast('Copy failed, please copy manually: Magnetrician', 'error');
+            showCopyToast(t('wechatCopyFailed'), 'error');
         });
         return;
     }
@@ -963,9 +991,9 @@ function copyWechat() {
     textarea.select();
     try {
         document.execCommand('copy');
-        showCopyToast('Wechat ID copied', 'success');
+        showCopyToast(t('wechatCopied'), 'success');
     } catch (_) {
-        showCopyToast('Copy failed, please copy manually: Magnetrician', 'error');
+        showCopyToast(t('wechatCopyFailed'), 'error');
     }
     document.body.removeChild(textarea);
 }
