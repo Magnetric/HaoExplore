@@ -150,7 +150,8 @@ class GalleryPageApp {
         photoElement.setAttribute('data-index', index);
         
         const photoId = photo.photoId;
-        const currentRating = this.getPhotoRatingFromLocal(photoId);
+        // Star rating disabled — keep code for possible restore
+        // const currentRating = this.getPhotoRatingFromLocal(photoId);
         const thumb = escapeHtml(photo.thumbnail || photo.image || '');
         const alt = escapeHtml(photo.title || photo.name || 'Photo');
         
@@ -160,16 +161,18 @@ class GalleryPageApp {
                 <div class="photo-info">
                 </div>
             </div>
+            <!--
             <div class="photo-rating">
                 <div class="star-rating" data-photo-id="${escapeHtml(photoId)}">
                 </div>
             </div>
+            -->
         `;
         
-        const starRating = photoElement.querySelector('.star-rating');
-        if (starRating) {
-            this.createStarsWithEvents(starRating, photoId, currentRating);
-        }
+        // const starRating = photoElement.querySelector('.star-rating');
+        // if (starRating) {
+        //     this.createStarsWithEvents(starRating, photoId, currentRating);
+        // }
         
         const img = photoElement.querySelector('img');
         if (img) {
@@ -274,10 +277,11 @@ class GalleryPageApp {
         this.currentPhotoIndex.textContent = index + 1;
         this.totalPhotos.textContent = sortedPhotos.length;
         
-        const fullscreenRating = document.getElementById('fullscreenStarRating');
-        if (fullscreenRating) {
-            this.setupFullscreenStarRating(fullscreenRating, photo.photoId);
-        }
+        // Star rating disabled — keep code for possible restore
+        // const fullscreenRating = document.getElementById('fullscreenStarRating');
+        // if (fullscreenRating) {
+        //     this.setupFullscreenStarRating(fullscreenRating, photo.photoId);
+        // }
         
         this.fullscreenViewer.style.display = 'flex';
         this.fullscreenViewer.classList.add('active');
@@ -471,7 +475,7 @@ class GalleryPageApp {
         const center = this.pointerMidpoint(points[0], points[1]);
         if (this._pinchStart.distance <= 0) return;
 
-        const nextScale = Math.min(5, Math.max(1, this._pinchStart.scale * (distance / this._pinchStart.distance)));
+        const nextScale = Math.min(8, Math.max(1, this._pinchStart.scale * (distance / this._pinchStart.distance)));
         if (nextScale === 1) {
             this.resetZoom();
             return;
@@ -497,7 +501,7 @@ class GalleryPageApp {
         const cy = rect.top + rect.height / 2;
         const { scale, x, y } = this.zoom;
 
-        const clamped = Math.min(5, Math.max(1, nextScale));
+        const clamped = Math.min(8, Math.max(1, nextScale));
         if (clamped === 1) {
             this.resetZoom();
             return;
