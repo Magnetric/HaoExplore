@@ -1803,6 +1803,9 @@ body.fullscreen-active .header {
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
+    touch-action: none;
+    cursor: default;
 }
 
 .fullscreen-image-container img {
@@ -1813,6 +1816,19 @@ body.fullscreen-active .header {
     object-fit: contain;
     border-radius: 0;
     box-shadow: none;
+    transform-origin: center center;
+    will-change: transform;
+    user-select: none;
+    -webkit-user-drag: none;
+    cursor: zoom-in;
+}
+
+.fullscreen-image-container img.zoomed {
+    cursor: grab;
+}
+
+.fullscreen-image-container img.zoomed.dragging {
+    cursor: grabbing;
 }
 
 .fullscreen-info {

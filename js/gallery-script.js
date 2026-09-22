@@ -20,11 +20,18 @@ class GalleryPageApp {
         // Full-screen viewer elements
         this.fullscreenViewer = document.getElementById('fullscreenViewer');
         this.fullscreenImage = document.getElementById('fullscreenImage');
+        this.fullscreenImageContainer = document.querySelector('.fullscreen-image-container');
         this.prevPhotoBtn = document.getElementById('prevPhotoBtn');
         this.nextPhotoBtn = document.getElementById('nextPhotoBtn');
         this.closeViewerBtn = document.getElementById('closeViewerBtn');
         this.currentPhotoIndex = document.getElementById('currentPhotoIndex');
         this.totalPhotos = document.getElementById('totalPhotos');
+        this.zoom = { scale: 1, x: 0, y: 0 };
+        this._zoomPointers = new Map();
+        this._pinchStart = null;
+        this._isPanning = false;
+        this._panLast = null;
+        this._suppressViewerClick = false;
         
         // Panorama elements
         this.panoramaSection = document.getElementById('panoramaSection');
@@ -260,6 +267,7 @@ class GalleryPageApp {
         
         if (!this.fullscreenImage) return;
         
+        this.resetZoom();
         this.fullscreenImage.src = photo.image || photo.thumbnail;
         this.fullscreenImage.alt = photo.title || photo.name || 'Photo';
         
@@ -281,6 +289,7 @@ class GalleryPageApp {
     }
 
     closeFullscreenViewer() {
+        this.resetZoom();
         this.fullscreenViewer.style.display = 'none';
         this.fullscreenViewer.classList.remove('active');
         document.body.classList.remove('fullscreen-active');
@@ -329,10 +338,203 @@ class GalleryPageApp {
         });
         
         this.fullscreenViewer.addEventListener('click', (e) => {
-            if (e.target === this.fullscreenViewer) {
+            if (this._suppressViewerClick) {
+                this._suppressViewerClick = false;
+                return;
+            }
+            if (e.target === this.fullscreenViewer || e.target === this.fullscreenImageContainer) {
+                if (this.zoom.scale > 1.01) {
+                    this.resetZoom();
+                    return;
+                }
                 this.closeFullscreenViewer();
             }
         });
+
+        this.setupFullscreenZoom();
+    }
+
+    setupFullscreenZoom() {
+        const container = this.fullscreenImageContainer;
+        const img = this.fullscreenImage;
+        if (!container || !img) return;
+
+        img.draggable = false;
+
+        container.addEventListener('wheel', (e) => {
+            if (!this.isFullscreenOpen()) return;
+            e.preventDefault();
+            this._suppressViewerClick = true;
+            const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+            this.zoomAtPoint(e.clientX, e.clientY, this.zoom.scale * factor);
+        }, { passive: false });
+
+        container.addEventListener('pointerdown', (e) => {
+            if (!this.isFullscreenOpen() || e.button !== 0) return;
+            if (e.target.closest('button') || e.target.closest('.star-rating') || e.target.closest('.fullscreen-counter')) return;
+
+            container.setPointerCapture(e.pointerId);
+            this._zoomPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            if (this._zoomPointers.size === 2) {
+                this._isPanning = false;
+                this._panLast = null;
+                const points = [...this._zoomPointers.values()];
+                this._pinchStart = {
+                    distance: this.pointerDistance(points[0], points[1]),
+                    scale: this.zoom.scale,
+                    center: this.pointerMidpoint(points[0], points[1]),
+                    x: this.zoom.x,
+                    y: this.zoom.y
+                };
+            } else if (this._zoomPointers.size === 1 && this.zoom.scale > 1.01) {
+                this._isPanning = true;
+                this._panLast = { x: e.clientX, y: e.clientY };
+                img.classList.add('dragging');
+            }
+        });
+
+        container.addEventListener('pointermove', (e) => {
+            if (!this._zoomPointers.has(e.pointerId)) return;
+            this._zoomPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            if (this._zoomPointers.size === 2 && this._pinchStart) {
+                e.preventDefault();
+                this._suppressViewerClick = true;
+                this.updatePinchZoom();
+            } else if (this._isPanning && this._panLast && this.zoom.scale > 1.01) {
+                e.preventDefault();
+                const dx = e.clientX - this._panLast.x;
+                const dy = e.clientY - this._panLast.y;
+                if (Math.abs(dx) > 1 || Math.abs(dy) > 1) this._suppressViewerClick = true;
+                this._panLast = { x: e.clientX, y: e.clientY };
+                this.zoom.x += dx;
+                this.zoom.y += dy;
+                this.clampPan();
+                this.applyZoomTransform();
+            }
+        }, { passive: false });
+
+        const endPointer = (e) => {
+            if (!this._zoomPointers.has(e.pointerId)) return;
+            this._zoomPointers.delete(e.pointerId);
+            img.classList.remove('dragging');
+
+            if (this._zoomPointers.size < 2) {
+                this._pinchStart = null;
+            }
+            if (this._zoomPointers.size === 0) {
+                this._isPanning = false;
+                this._panLast = null;
+                if (this.zoom.scale < 1.05) this.resetZoom();
+            } else if (this._zoomPointers.size === 1 && this.zoom.scale > 1.01) {
+                const remaining = [...this._zoomPointers.values()][0];
+                this._isPanning = true;
+                this._panLast = { x: remaining.x, y: remaining.y };
+            }
+        };
+
+        container.addEventListener('pointerup', endPointer);
+        container.addEventListener('pointercancel', endPointer);
+    }
+
+    isFullscreenOpen() {
+        return this.fullscreenViewer && this.fullscreenViewer.style.display === 'flex';
+    }
+
+    resetZoom() {
+        this.zoom = { scale: 1, x: 0, y: 0 };
+        this._zoomPointers.clear();
+        this._pinchStart = null;
+        this._isPanning = false;
+        this._panLast = null;
+        this.applyZoomTransform();
+    }
+
+    applyZoomTransform() {
+        if (!this.fullscreenImage) return;
+        const { scale, x, y } = this.zoom;
+        this.fullscreenImage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+        this.fullscreenImage.classList.toggle('zoomed', scale > 1.01);
+        if (scale <= 1.01) this.fullscreenImage.classList.remove('dragging');
+    }
+
+    updatePinchZoom() {
+        if (!this._pinchStart || this._zoomPointers.size < 2) return;
+
+        const container = this.fullscreenImageContainer;
+        const rect = container.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const points = [...this._zoomPointers.values()];
+        const distance = this.pointerDistance(points[0], points[1]);
+        const center = this.pointerMidpoint(points[0], points[1]);
+        if (this._pinchStart.distance <= 0) return;
+
+        const nextScale = Math.min(5, Math.max(1, this._pinchStart.scale * (distance / this._pinchStart.distance)));
+        if (nextScale === 1) {
+            this.resetZoom();
+            return;
+        }
+
+        const start = this._pinchStart;
+        const ratio = nextScale / start.scale;
+        const startOx = start.center.x - cx;
+        const startOy = start.center.y - cy;
+        this.zoom.scale = nextScale;
+        this.zoom.x = startOx - (startOx - start.x) * ratio + (center.x - start.center.x);
+        this.zoom.y = startOy - (startOy - start.y) * ratio + (center.y - start.center.y);
+        this.clampPan();
+        this.applyZoomTransform();
+    }
+
+    zoomAtPoint(clientX, clientY, nextScale) {
+        const container = this.fullscreenImageContainer;
+        if (!container) return;
+
+        const rect = container.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const { scale, x, y } = this.zoom;
+
+        const clamped = Math.min(5, Math.max(1, nextScale));
+        if (clamped === 1) {
+            this.resetZoom();
+            return;
+        }
+
+        const ox = clientX - cx;
+        const oy = clientY - cy;
+        const ratio = clamped / scale;
+        this.zoom.scale = clamped;
+        this.zoom.x = ox - (ox - x) * ratio;
+        this.zoom.y = oy - (oy - y) * ratio;
+        this.clampPan();
+        this.applyZoomTransform();
+    }
+
+    clampPan() {
+        if (this.zoom.scale <= 1) {
+            this.zoom.x = 0;
+            this.zoom.y = 0;
+            return;
+        }
+        const container = this.fullscreenImageContainer;
+        const img = this.fullscreenImage;
+        if (!container || !img) return;
+
+        const maxX = (container.clientWidth * (this.zoom.scale - 1)) / 2 + img.clientWidth * 0.25;
+        const maxY = (container.clientHeight * (this.zoom.scale - 1)) / 2 + img.clientHeight * 0.25;
+        this.zoom.x = Math.min(maxX, Math.max(-maxX, this.zoom.x));
+        this.zoom.y = Math.min(maxY, Math.max(-maxY, this.zoom.y));
+    }
+
+    pointerDistance(a, b) {
+        return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    pointerMidpoint(a, b) {
+        return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     }
 
     updateAllPhotoRatings(photoId, rating) {
