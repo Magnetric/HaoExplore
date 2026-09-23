@@ -41,7 +41,12 @@ class GalleryPageApp {
         this.panoramaURLs = [];
         this.galleryId = null;
         this._openSharedPanorama = false;
-        this._panoramaEnterGate = null;
+        this._panoIdleTimer = null;
+        this._panoControlsTimer = null;
+        this._panoUserInteracted = false;
+        this._panoIdleBound = false;
+        this._panoChromeBound = false;
+        this._panoPointerDown = null;
         
         this.init();
     }
@@ -774,7 +779,6 @@ class GalleryPageApp {
         if (this._openSharedPanorama) {
             requestAnimationFrame(() => {
                 this.enterPanoramaFullscreen({ skipSystemFullscreen: true });
-                this.showPanoramaEnterGate();
                 this.syncPanoramaShareUrl();
             });
         }
@@ -827,6 +831,9 @@ class GalleryPageApp {
     
     initializePanoramaViewer(panoramaUrl) {
         try {
+            this.teardownPanoramaIdleWatch();
+            this.clearPanoramaControlsTimer();
+
             if (this.panoramaViewer) {
                 this.panoramaViewer.destroy();
                 this.panoramaViewer = null;
@@ -837,6 +844,7 @@ class GalleryPageApp {
             }
             
             this.panoramaContainer.innerHTML = '';
+            this.panoramaContainer.classList.remove('controls-hidden');
             
             if (this.panoramaURLs.length > 1) {
                 const counter = document.createElement('div');
@@ -859,12 +867,14 @@ class GalleryPageApp {
                 
                 const prevBtn = document.createElement('button');
                 prevBtn.className = 'panorama-nav-btn panorama-nav-prev';
+                prevBtn.type = 'button';
                 prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
                 prevBtn.onclick = () => this.showPreviousPanorama();
                 this.panoramaContainer.appendChild(prevBtn);
                 
                 const nextBtn = document.createElement('button');
                 nextBtn.className = 'panorama-nav-btn panorama-nav-next';
+                nextBtn.type = 'button';
                 nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
                 nextBtn.onclick = () => this.showNextPanorama();
                 this.panoramaContainer.appendChild(nextBtn);
@@ -883,8 +893,10 @@ class GalleryPageApp {
                 "panorama": panoramaUrl,
                 "autoLoad": true,
                 "autoRotate": -2,
-                "hotSpotDebug": false,
+                "yaw": 0,
+                "pitch": 0,
                 "hfov": 100,
+                "hotSpotDebug": false,
                 "mouseZoom": true,
                 "showControls": false,
                 "showFullscreenCtrl": false,
@@ -897,6 +909,8 @@ class GalleryPageApp {
             this.hideUnwantedButtons(panoramaDiv);
             this.addCustomFullscreenButton(this.panoramaContainer);
             this.addPanoramaShareButton(this.panoramaContainer);
+            this.setupPanoramaIdleWatch();
+            this.setupPanoramaChromeToggle();
 
             if (this.panoramaContainer.classList.contains('fullscreen')) {
                 const fullscreenBtn = this.panoramaContainer.querySelector('.custom-fullscreen-btn');
@@ -904,6 +918,7 @@ class GalleryPageApp {
                     fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
                     fullscreenBtn.title = t('exitFullscreen');
                 }
+                this.showPanoramaControls(true);
             }
             
             this.panoramaObserver = new MutationObserver(() => {
@@ -916,9 +931,6 @@ class GalleryPageApp {
             
             this.panoramaViewer.on('load', () => {
                 this.hideUnwantedButtons(panoramaDiv);
-                if (this._panoramaEnterGate) {
-                    this.panoramaContainer.appendChild(this._panoramaEnterGate);
-                }
             });
             
             this.panoramaViewer.on('error', (error) => {
@@ -940,6 +952,144 @@ class GalleryPageApp {
             `;
         }
     }
+
+    setupPanoramaIdleWatch() {
+        this.teardownPanoramaIdleWatch();
+        if (!this.panoramaContainer) return;
+
+        this._panoUserInteracted = false;
+        this._panoIdleOnActivity = () => {
+            this._panoUserInteracted = true;
+            this.schedulePanoramaIdleReset();
+        };
+
+        const types = ['pointerdown', 'wheel', 'touchstart'];
+        types.forEach(type => {
+            this.panoramaContainer.addEventListener(type, this._panoIdleOnActivity, { passive: true });
+        });
+        this._panoIdleBound = true;
+    }
+
+    teardownPanoramaIdleWatch() {
+        this.clearPanoramaIdleTimer();
+        if (this._panoIdleBound && this.panoramaContainer && this._panoIdleOnActivity) {
+            ['pointerdown', 'wheel', 'touchstart'].forEach(type => {
+                this.panoramaContainer.removeEventListener(type, this._panoIdleOnActivity);
+            });
+        }
+        this._panoIdleBound = false;
+        this._panoIdleOnActivity = null;
+        this._panoUserInteracted = false;
+    }
+
+    clearPanoramaIdleTimer() {
+        if (this._panoIdleTimer) {
+            clearTimeout(this._panoIdleTimer);
+            this._panoIdleTimer = null;
+        }
+    }
+
+    schedulePanoramaIdleReset() {
+        this.clearPanoramaIdleTimer();
+        this._panoIdleTimer = setTimeout(() => {
+            this.resetPanoramaToCenterAndRotate();
+        }, 5000);
+    }
+
+    resetPanoramaToCenterAndRotate() {
+        const viewer = this.panoramaViewer;
+        if (!viewer || !this._panoUserInteracted) return;
+
+        this._panoUserInteracted = false;
+        this.clearPanoramaIdleTimer();
+
+        if (typeof viewer.stopAutoRotate === 'function') {
+            viewer.stopAutoRotate();
+        }
+
+        const resume = () => {
+            if (this.panoramaViewer !== viewer) return;
+            if (typeof viewer.startAutoRotate === 'function') {
+                viewer.startAutoRotate(-2, 0);
+            }
+        };
+
+        if (typeof viewer.lookAt === 'function') {
+            viewer.lookAt(0, 0, 100, 1000, resume);
+        } else {
+            if (typeof viewer.setPitch === 'function') viewer.setPitch(0, 1000);
+            if (typeof viewer.setYaw === 'function') viewer.setYaw(0, 1000);
+            if (typeof viewer.setHfov === 'function') viewer.setHfov(100, 1000);
+            setTimeout(resume, 1000);
+        }
+    }
+
+    setupPanoramaChromeToggle() {
+        if (this._panoChromeBound || !this.panoramaContainer) return;
+
+        this._onPanoChromePointerDown = (e) => {
+            if (!this.panoramaContainer.classList.contains('fullscreen')) return;
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            if (!this.panoramaContainer.classList.contains('controls-hidden')) {
+                this.showPanoramaControls(true);
+            }
+            this._panoPointerDown = {
+                x: e.clientX,
+                y: e.clientY,
+                t: Date.now(),
+                id: e.pointerId
+            };
+        };
+
+        this._onPanoChromePointerUp = (e) => {
+            if (!this.panoramaContainer.classList.contains('fullscreen')) {
+                this._panoPointerDown = null;
+                return;
+            }
+            const start = this._panoPointerDown;
+            this._panoPointerDown = null;
+            if (!start || start.id !== e.pointerId) return;
+
+            const dx = Math.abs(e.clientX - start.x);
+            const dy = Math.abs(e.clientY - start.y);
+            const dt = Date.now() - start.t;
+            if (dx > 10 || dy > 10 || dt > 500) return;
+
+            // Single tap/click: reveal chrome (and refresh auto-hide timer)
+            this.showPanoramaControls(true);
+        };
+
+        this.panoramaContainer.addEventListener('pointerdown', this._onPanoChromePointerDown, { passive: true });
+        this.panoramaContainer.addEventListener('pointerup', this._onPanoChromePointerUp, { passive: true });
+        this.panoramaContainer.addEventListener('pointercancel', () => {
+            this._panoPointerDown = null;
+        }, { passive: true });
+        this._panoChromeBound = true;
+    }
+
+    clearPanoramaControlsTimer() {
+        if (this._panoControlsTimer) {
+            clearTimeout(this._panoControlsTimer);
+            this._panoControlsTimer = null;
+        }
+    }
+
+    showPanoramaControls(scheduleHide = false) {
+        if (!this.panoramaContainer) return;
+        this.panoramaContainer.classList.remove('controls-hidden');
+        this.clearPanoramaControlsTimer();
+        if (scheduleHide && this.panoramaContainer.classList.contains('fullscreen')) {
+            this._panoControlsTimer = setTimeout(() => {
+                this.hidePanoramaControls();
+            }, 3000);
+        }
+    }
+
+    hidePanoramaControls() {
+        this.clearPanoramaControlsTimer();
+        if (!this.panoramaContainer || !this.panoramaContainer.classList.contains('fullscreen')) return;
+        this.panoramaContainer.classList.add('controls-hidden');
+    }
     
     showPreviousPanorama() {
         if (this.panoramaURLs.length <= 1) return;
@@ -947,9 +1097,6 @@ class GalleryPageApp {
         this.currentPanoramaIndex = (this.currentPanoramaIndex - 1 + this.panoramaURLs.length) % this.panoramaURLs.length;
         this.initializePanoramaViewer(this.panoramaURLs[this.currentPanoramaIndex]);
         this.syncPanoramaShareUrl();
-        if (this._panoramaEnterGate) {
-            this.panoramaContainer.appendChild(this._panoramaEnterGate);
-        }
     }
     
     showNextPanorama() {
@@ -958,9 +1105,6 @@ class GalleryPageApp {
         this.currentPanoramaIndex = (this.currentPanoramaIndex + 1) % this.panoramaURLs.length;
         this.initializePanoramaViewer(this.panoramaURLs[this.currentPanoramaIndex]);
         this.syncPanoramaShareUrl();
-        if (this._panoramaEnterGate) {
-            this.panoramaContainer.appendChild(this._panoramaEnterGate);
-        }
     }
     
     updatePanoramaCounter() {
@@ -1023,34 +1167,6 @@ class GalleryPageApp {
 
         parent.appendChild(shareBtn);
     }
-
-    showPanoramaEnterGate() {
-        this.hidePanoramaEnterGate();
-        if (!this.panoramaContainer) return;
-
-        const gate = document.createElement('button');
-        gate.type = 'button';
-        gate.className = 'panorama-enter-gate';
-        gate.innerHTML = `
-            <span class="panorama-enter-gate-title">${escapeHtml(t('enterPanorama'))}</span>
-            <span class="panorama-enter-gate-hint">${escapeHtml(t('enterPanoramaHint'))}</span>
-        `;
-        gate.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.hidePanoramaEnterGate();
-            this.lockLandscapeOrientation();
-        });
-
-        this._panoramaEnterGate = gate;
-        this.panoramaContainer.appendChild(gate);
-    }
-
-    hidePanoramaEnterGate() {
-        if (this._panoramaEnterGate && this._panoramaEnterGate.parentNode) {
-            this._panoramaEnterGate.parentNode.removeChild(this._panoramaEnterGate);
-        }
-        this._panoramaEnterGate = null;
-    }
     
     togglePanoramaFullscreen() {
         if (!this.panoramaContainer) return;
@@ -1102,8 +1218,8 @@ class GalleryPageApp {
         if (!this.onFullscreenChange) {
             this.onFullscreenChange = () => {
                 const active = document.fullscreenElement || document.webkitFullscreenElement;
-                // Ignore failed auto-request; only exit when user leaves after FS was granted
-                if (!active && !this._panoramaEnterGate) {
+                // Only exit CSS fullscreen after system FS was actually granted then left
+                if (!active) {
                     const hadSystemFs = this._hadSystemFullscreen;
                     if (hadSystemFs) this.exitPanoramaFullscreen();
                 }
@@ -1118,16 +1234,20 @@ class GalleryPageApp {
             window.addEventListener('orientationchange', this.orientationChangeHandler);
             window.addEventListener('resize', this.orientationChangeHandler);
         }
+
+        this.showPanoramaControls(true);
+        this.resizePanoramaViewer();
     }
 
     exitPanoramaFullscreen() {
         if (!this.panoramaContainer || this._exitingPanorama) return;
         this._exitingPanorama = true;
 
-        this.hidePanoramaEnterGate();
         this.clearForceLandscape();
         this.unlockLandscapeOrientation();
         this._hadSystemFullscreen = false;
+        this.clearPanoramaControlsTimer();
+        this.panoramaContainer.classList.remove('controls-hidden');
 
         this.panoramaContainer.classList.remove('fullscreen');
         document.body.classList.remove('panorama-fullscreen-active');
@@ -1365,10 +1485,4 @@ window.addEventListener('langchange', () => {
     }
     const shareBtn = galleryApp.panoramaContainer && galleryApp.panoramaContainer.querySelector('.panorama-share-btn');
     if (shareBtn) shareBtn.title = t('sharePanorama');
-    if (galleryApp._panoramaEnterGate) {
-        const title = galleryApp._panoramaEnterGate.querySelector('.panorama-enter-gate-title');
-        const hint = galleryApp._panoramaEnterGate.querySelector('.panorama-enter-gate-hint');
-        if (title) title.textContent = t('enterPanorama');
-        if (hint) hint.textContent = t('enterPanoramaHint');
-    }
 });

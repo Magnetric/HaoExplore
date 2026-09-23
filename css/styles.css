@@ -3185,42 +3185,20 @@ button.contact-link span {
     transform: scale(0.95);
 }
 
-.panorama-enter-gate {
-    position: absolute;
-    inset: 0;
-    z-index: 2000;
-    border: none;
-    margin: 0;
-    padding: 24px;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: rgba(0, 0, 0, 0.55);
-    color: #fff;
-    text-align: center;
-    -webkit-tap-highlight-color: transparent;
+.panorama-container.fullscreen .panorama-nav-btn,
+.panorama-container.fullscreen .custom-fullscreen-btn,
+.panorama-container.fullscreen .panorama-share-btn,
+.panorama-container.fullscreen .panorama-counter {
+    transition: opacity 0.25s ease, visibility 0.25s ease, transform 0.2s ease;
 }
 
-.panorama-enter-gate-title {
-    font-size: 1.35rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-}
-
-.panorama-enter-gate-hint {
-    font-size: 0.9rem;
-    opacity: 0.85;
-    max-width: 16rem;
-    line-height: 1.4;
-}
-
-.panorama-enter-gate:hover,
-.panorama-enter-gate:focus-visible {
-    background: rgba(0, 0, 0, 0.62);
-    outline: none;
+.panorama-container.fullscreen.controls-hidden .panorama-nav-btn,
+.panorama-container.fullscreen.controls-hidden .custom-fullscreen-btn,
+.panorama-container.fullscreen.controls-hidden .panorama-share-btn,
+.panorama-container.fullscreen.controls-hidden .panorama-counter {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 /* Pannellum viewer customization */
@@ -3417,14 +3395,6 @@ button.contact-link span {
 
     .panorama-share-btn {
         right: 44px;
-    }
-
-    .panorama-enter-gate-title {
-        font-size: 1.15rem;
-    }
-
-    .panorama-enter-gate-hint {
-        font-size: 0.85rem;
     }
 }
 
