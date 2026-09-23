@@ -3140,12 +3140,12 @@ button.contact-link span {
     max-height: none;
 }
 
-/* Custom fullscreen button styles */
-.custom-fullscreen-btn {
+/* Custom fullscreen / share buttons */
+.custom-fullscreen-btn,
+.panorama-share-btn {
     position: absolute;
     top: 5px;
-    right: 5px;
-    z-index: 1000;
+    z-index: 1100;
     background: rgba(0, 0, 0, 0.7);
     border: none;
     color: white;
@@ -3157,16 +3157,70 @@ button.contact-link span {
     align-items: center;
     justify-content: center;
     font-size: 16px;
-    transition: all 0.3s ease;
+    transition: background 0.2s ease, transform 0.2s ease;
+    pointer-events: auto;
 }
 
-.custom-fullscreen-btn:hover {
+.custom-fullscreen-btn {
+    right: 5px;
+}
+
+.panorama-share-btn {
+    right: 50px;
+}
+
+.panorama-container.fullscreen .custom-fullscreen-btn,
+.panorama-container.fullscreen .panorama-share-btn {
+    z-index: 11000;
+}
+
+.custom-fullscreen-btn:hover,
+.panorama-share-btn:hover {
     background: rgba(0, 0, 0, 0.9);
-    transform: scale(1.1);
+    transform: scale(1.08);
 }
 
-.custom-fullscreen-btn:active {
+.custom-fullscreen-btn:active,
+.panorama-share-btn:active {
     transform: scale(0.95);
+}
+
+.panorama-enter-gate {
+    position: absolute;
+    inset: 0;
+    z-index: 2000;
+    border: none;
+    margin: 0;
+    padding: 24px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    text-align: center;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.panorama-enter-gate-title {
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.panorama-enter-gate-hint {
+    font-size: 0.9rem;
+    opacity: 0.85;
+    max-width: 16rem;
+    line-height: 1.4;
+}
+
+.panorama-enter-gate:hover,
+.panorama-enter-gate:focus-visible {
+    background: rgba(0, 0, 0, 0.62);
+    outline: none;
 }
 
 /* Pannellum viewer customization */
@@ -3349,12 +3403,28 @@ button.contact-link span {
         font-size: 0.8rem;
     }
     
-    .custom-fullscreen-btn {
+    .custom-fullscreen-btn,
+    .panorama-share-btn {
         width: 36px;
         height: 36px;
         font-size: 14px;
         top: 3px;
+    }
+
+    .custom-fullscreen-btn {
         right: 3px;
+    }
+
+    .panorama-share-btn {
+        right: 44px;
+    }
+
+    .panorama-enter-gate-title {
+        font-size: 1.15rem;
+    }
+
+    .panorama-enter-gate-hint {
+        font-size: 0.85rem;
     }
 }
 
@@ -3384,11 +3454,19 @@ button.contact-link span {
         font-size: 0.75rem;
     }
     
-    .custom-fullscreen-btn {
+    .custom-fullscreen-btn,
+    .panorama-share-btn {
         width: 32px;
         height: 32px;
         font-size: 12px;
         top: 2px;
+    }
+
+    .custom-fullscreen-btn {
         right: 2px;
+    }
+
+    .panorama-share-btn {
+        right: 38px;
     }
 }

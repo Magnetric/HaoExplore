@@ -52,7 +52,12 @@ const I18N = {
         ratingFailed: 'Failed to save rating. Please try again.',
         panoramaFailed: 'Failed to load panorama',
         fullscreen: 'Fullscreen',
-        exitFullscreen: 'Exit Fullscreen'
+        exitFullscreen: 'Exit Fullscreen',
+        sharePanorama: 'Copy panorama link',
+        shareCopied: 'Panorama link copied!',
+        shareFailed: 'Could not copy link. Please copy from the address bar.',
+        enterPanorama: 'Tap to enter panorama',
+        enterPanoramaHint: 'Enables fullscreen and landscape on phones'
     },
     zh: {
         navHome: '首页',
@@ -107,7 +112,12 @@ const I18N = {
         ratingFailed: '评分保存失败，请重试。',
         panoramaFailed: '全景图加载失败',
         fullscreen: '全屏',
-        exitFullscreen: '退出全屏'
+        exitFullscreen: '退出全屏',
+        sharePanorama: '复制全景分享链接',
+        shareCopied: '全景链接已复制',
+        shareFailed: '复制失败，请从地址栏手动复制。',
+        enterPanorama: '点击进入全景',
+        enterPanoramaHint: '可开启系统全屏并锁定横屏'
     }
 };
 
