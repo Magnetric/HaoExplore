@@ -909,6 +909,7 @@ class GalleryPageApp {
             this.hideUnwantedButtons(panoramaDiv);
             this.addCustomFullscreenButton(this.panoramaContainer);
             this.addPanoramaShareButton(this.panoramaContainer);
+            this.addPanoramaFilenameLabel(this.panoramaContainer, panoramaUrl);
             this.setupPanoramaIdleWatch();
             this.setupPanoramaChromeToggle();
 
@@ -1166,6 +1167,29 @@ class GalleryPageApp {
         });
 
         parent.appendChild(shareBtn);
+    }
+
+    getPanoramaDisplayName(panoramaUrl) {
+        if (!panoramaUrl || typeof panoramaUrl !== 'string') return '';
+        try {
+            const path = panoramaUrl.split('?')[0];
+            const raw = decodeURIComponent(path.split('/').pop() || '');
+            return raw.replace(/\.(webp|jpe?g|png)$/i, '');
+        } catch (_) {
+            const raw = panoramaUrl.split('/').pop() || '';
+            return raw.replace(/\.(webp|jpe?g|png)$/i, '');
+        }
+    }
+
+    addPanoramaFilenameLabel(parent, panoramaUrl) {
+        const name = this.getPanoramaDisplayName(panoramaUrl);
+        if (!name || !parent) return;
+
+        const label = document.createElement('div');
+        label.className = 'panorama-filename-label';
+        label.textContent = name;
+        label.title = name;
+        parent.appendChild(label);
     }
     
     togglePanoramaFullscreen() {
