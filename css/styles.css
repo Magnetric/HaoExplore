@@ -3350,7 +3350,7 @@ button.contact-link span {
     -webkit-backdrop-filter: blur(10px);
 }
 
-/* Loading state */
+/* Loading / error state */
 .panorama-loading {
     display: flex;
     flex-direction: column;
@@ -3358,12 +3358,66 @@ button.contact-link span {
     justify-content: center;
     height: 100%;
     color: #666;
+    padding: 1.25rem;
+    box-sizing: border-box;
+    text-align: center;
 }
 
 .panorama-loading i {
     font-size: 2rem;
     margin-bottom: 1rem;
     animation: spin 1s linear infinite;
+}
+
+.panorama-error i {
+    animation: none;
+    color: #c0392b;
+}
+
+.panorama-webgl-error {
+    max-width: 34rem;
+    margin: 0 auto;
+    gap: 0.35rem;
+}
+
+.panorama-error-title {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 1.15rem;
+    font-weight: 650;
+}
+
+.panorama-error-desc {
+    margin: 0.35rem 0 0.75rem;
+    color: #5d6d7e;
+    font-size: 0.95rem;
+    line-height: 1.45;
+}
+
+.panorama-error-steps {
+    margin: 0;
+    padding-left: 1.2rem;
+    text-align: left;
+    color: #34495e;
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+
+.panorama-error-steps li + li {
+    margin-top: 0.55rem;
+}
+
+.panorama-container.fullscreen .panorama-webgl-error {
+    color: #ddd;
+}
+
+.panorama-container.fullscreen .panorama-error-title {
+    color: #fff;
+}
+
+.panorama-container.fullscreen .panorama-error-desc,
+.panorama-container.fullscreen .panorama-error-steps {
+    color: #d0d5db;
 }
 
 @keyframes spin {

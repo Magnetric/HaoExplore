@@ -936,22 +936,65 @@ class GalleryPageApp {
             
             this.panoramaViewer.on('error', (error) => {
                 console.error('Panorama loading error:', error);
-                this.panoramaContainer.innerHTML = `
-                    <div class="panorama-loading">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>${t('panoramaFailed')}</p>
-                    </div>
-                `;
+                this.showPanoramaLoadError(error);
             });
         } catch (error) {
             console.error('Error initializing panorama viewer:', error);
+            this.showPanoramaLoadError(error);
+        }
+    }
+
+    detectBrowserFamily() {
+        const ua = navigator.userAgent || '';
+        if (/Edg\//.test(ua) || /EdgiOS\//.test(ua)) return 'edge';
+        if (/Safari/i.test(ua) && !/Chrome|Chromium|CriOS|Edg/i.test(ua)) return 'safari';
+        if (/Chrome|Chromium|CriOS/i.test(ua)) return 'chrome';
+        return 'other';
+    }
+
+    isWebGLError(error) {
+        const msg = String(error || '');
+        if (/webgl/i.test(msg)) return true;
+        try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            return !gl;
+        } catch (_) {
+            return true;
+        }
+    }
+
+    showPanoramaLoadError(error) {
+        if (!this.panoramaContainer) return;
+
+        const isWebGL = this.isWebGLError(error);
+        if (!isWebGL) {
             this.panoramaContainer.innerHTML = `
-                <div class="panorama-loading">
+                <div class="panorama-loading panorama-error">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <p>${t('panoramaFailed')}</p>
+                    <p>${escapeHtml(t('panoramaFailed'))}</p>
                 </div>
             `;
+            return;
         }
+
+        const browser = this.detectBrowserFamily();
+        const stepKey = browser === 'chrome' ? 'panoramaWebGLChrome'
+            : browser === 'edge' ? 'panoramaWebGLEdge'
+            : browser === 'safari' ? 'panoramaWebGLSafari'
+            : 'panoramaWebGLOther';
+
+        this.panoramaContainer.innerHTML = `
+            <div class="panorama-loading panorama-error panorama-webgl-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                <h3 class="panorama-error-title">${escapeHtml(t('panoramaWebGLTitle'))}</h3>
+                <p class="panorama-error-desc">${escapeHtml(t('panoramaWebGLDesc'))}</p>
+                <ol class="panorama-error-steps">
+                    <li>${escapeHtml(t(stepKey))}</li>
+                    ${browser !== 'other' ? `<li>${escapeHtml(t('panoramaWebGLOther'))}</li>` : ''}
+                </ol>
+            </div>
+        `;
     }
 
     setupPanoramaIdleWatch() {

@@ -1722,17 +1722,19 @@ function createPanoramaItem(url, thumbnailUrl, index) {
     item.draggable = true;
     item.dataset.panoramaIndex = index - 1; // Store actual index for operations
     
-    // Extract filename from URL
-    const filename = url.split('/').pop() || `pano${index}.webp`;
+    const rawName = decodeURIComponent((url.split('/').pop() || `pano${index}.webp`).split('?')[0]);
+    const extMatch = rawName.match(/(\.(webp|jpe?g|png))$/i);
+    const fileExt = extMatch ? extMatch[1] : '.webp';
+    const baseName = extMatch ? rawName.slice(0, -fileExt.length) : rawName;
     
     item.innerHTML = `
         <div class="panorama-drag-handle" title="Drag to reorder">
             <i class="fas fa-grip-vertical"></i>
             <span class="panorama-index">${index}</span>
         </div>
-        <img src="${thumbnailUrl}" alt="Panorama ${index}" class="panorama-preview" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDIwMCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiBmaWxsPSIjZjhmOWZhIi8+CjxwYXRoIGQ9Ik04MCA2MEgxMjBWOTBIOThaIiBmaWxsPSIjZGVlMmU2Ii8+Cjx0ZXh0IHg9IjEwMCIgeT0iODAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzZjNzU3ZCI+UGFub3JhbWEgSW1hZ2U8L3RleHQ+Cjwvc3ZnPg=='">
+        <img src="${escapeHtml(thumbnailUrl)}" alt="Panorama ${index}" class="panorama-preview" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDIwMCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMTUwIiBmaWxsPSIjZjhmOWZhIi8+CjxwYXRoIGQ9Ik04MCA2MEgxMjBWOTBIOThaIiBmaWxsPSIjZGVlMmU2Ii8+Cjx0ZXh0IHg9IjEwMCIgeT0iODAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzZjNzU3ZCI+UGFub3JhbWEgSW1hZ2U8L3RleHQ+Cjwvc3ZnPg=='">
         <div class="panorama-info">
-            <h4>${filename}</h4>
+            <input type="text" class="panorama-filename-input" data-panorama-index="${index - 1}" value="${escapeHtml(baseName)}" title="Edit filename (extension cannot be changed)" spellcheck="false" />
         </div>
         <div class="panorama-actions">
             <button class="panorama-action-btn delete" onclick="deletePanorama(${index - 1})" title="Delete panorama">
@@ -1740,8 +1742,91 @@ function createPanoramaItem(url, thumbnailUrl, index) {
             </button>
         </div>
     `;
+
+    const nameInput = item.querySelector('.panorama-filename-input');
+    if (nameInput) {
+        nameInput.dataset.originalBasename = baseName;
+        nameInput.dataset.fileExt = fileExt;
+        ['mousedown', 'pointerdown', 'touchstart', 'click'].forEach(evt => {
+            nameInput.addEventListener(evt, (e) => e.stopPropagation());
+        });
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                nameInput.blur();
+            } else if (e.key === 'Escape') {
+                nameInput.value = nameInput.dataset.originalBasename || baseName;
+                nameInput.blur();
+            }
+        });
+        nameInput.addEventListener('focus', () => {
+            item.draggable = false;
+        });
+        nameInput.addEventListener('blur', () => {
+            item.draggable = true;
+            renamePanoramaFilename(index - 1, nameInput);
+        });
+    }
     
     return item;
+}
+
+async function renamePanoramaFilename(panoramaIndex, inputEl) {
+    if (!currentGallery || !currentGallery.panoramaURL) return;
+    if (panoramaIndex < 0 || panoramaIndex >= currentGallery.panoramaURL.length) return;
+    if (!inputEl || inputEl.dataset.renaming === '1') return;
+
+    const fileExt = inputEl.dataset.fileExt || '.webp';
+    const originalBase = inputEl.dataset.originalBasename || '';
+    // Strip any extension the user may have typed; extension is fixed.
+    let nextBase = (inputEl.value || '').trim().replace(/\.(webp|jpe?g|png)$/i, '');
+    if (!nextBase) {
+        inputEl.value = originalBase;
+        showMessage('Filename cannot be empty', 'error');
+        return;
+    }
+    inputEl.value = nextBase;
+    if (nextBase === originalBase) return;
+
+    const nextName = `${nextBase}${fileExt}`;
+    inputEl.dataset.renaming = '1';
+    inputEl.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/galleries?id=${encodeURIComponent(currentGallery.id)}&action=rename_panorama`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                panoramaIndex,
+                newFilename: nextName
+            })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.error || 'Failed to rename panorama');
+        }
+
+        const savedName = result.filename || nextName;
+        const savedExtMatch = savedName.match(/(\.(webp|jpe?g|png))$/i);
+        const savedExt = savedExtMatch ? savedExtMatch[1] : fileExt;
+        const savedBase = savedExtMatch ? savedName.slice(0, -savedExt.length) : savedName;
+        if (Array.isArray(currentGallery.panoramaURL) && result.panoramaURL) {
+            currentGallery.panoramaURL[panoramaIndex] = result.panoramaURL;
+        }
+        if (Array.isArray(currentGallery.panoThumbnail) && result.panoThumbnail) {
+            currentGallery.panoThumbnail[panoramaIndex] = result.panoThumbnail;
+        }
+        inputEl.dataset.originalBasename = savedBase;
+        inputEl.dataset.fileExt = savedExt;
+        inputEl.value = savedBase;
+        showMessage(`Renamed to ${savedBase}`, 'success');
+    } catch (error) {
+        inputEl.value = originalBase;
+        showMessage(error.message || 'Failed to rename panorama', 'error');
+    } finally {
+        inputEl.disabled = false;
+        inputEl.dataset.renaming = '0';
+    }
 }
 
 // Handle panorama file selection

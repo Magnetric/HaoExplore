@@ -112,6 +112,12 @@ def lambda_handler(event, context):
             if not gallery_id:
                 return create_response(400, {'error': 'Gallery ID required for delete panorama'})
             return delete_panorama(gallery_id, body)
+        elif action_param == 'rename_panorama':
+            logger.info("Routing to rename_panorama()")
+            gallery_id = query_params.get('id')
+            if not gallery_id:
+                return create_response(400, {'error': 'Gallery ID required for rename panorama'})
+            return rename_panorama(gallery_id, body)
         else:
             logger.info("Routing to create_gallery()")
             return create_gallery(body)
@@ -1091,22 +1097,7 @@ def delete_panorama(gallery_id: str, payload: dict):
         # Panorama URL format: https://bucket.s3.region.amazonaws.com/galleries/continent/country/gallery_name/panorama/filename.webp
         logger.info(f"Panorama URL to delete: {panorama_to_delete}")
         
-        s3_key = None
-        
-        # Try different URL formats to extract S3 key
-        if f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/' in panorama_to_delete:
-            s3_key = panorama_to_delete.split(f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/')[1]
-        elif f'{BUCKET_NAME}.s3.' in panorama_to_delete:
-            # Handle different S3 regions
-            parts = panorama_to_delete.split(f'{BUCKET_NAME}.s3.')
-            if len(parts) > 1:
-                region_and_path = parts[1]
-                s3_key = region_and_path.split('.amazonaws.com/')[1] if '.amazonaws.com/' in region_and_path else None
-        elif panorama_to_delete.startswith('https://'):
-            # Handle direct S3 URL format
-            url_parts = panorama_to_delete.split('/')
-            if len(url_parts) >= 4 and 's3' in url_parts[2]:
-                s3_key = '/'.join(url_parts[3:])
+        s3_key = extract_s3_key_from_url(panorama_to_delete)
         
         if s3_key:
             logger.info(f"Extracted S3 key: {s3_key}")
@@ -1126,21 +1117,7 @@ def delete_panorama(gallery_id: str, payload: dict):
         if thumbnail_to_delete:
             logger.info(f"Thumbnail URL to delete: {thumbnail_to_delete}")
             
-            thumbnail_s3_key = None
-            # Try different URL formats to extract S3 key for thumbnail
-            if f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/' in thumbnail_to_delete:
-                thumbnail_s3_key = thumbnail_to_delete.split(f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/')[1]
-            elif f'{BUCKET_NAME}.s3.' in thumbnail_to_delete:
-                # Handle different S3 regions
-                parts = thumbnail_to_delete.split(f'{BUCKET_NAME}.s3.')
-                if len(parts) > 1:
-                    region_and_path = parts[1]
-                    thumbnail_s3_key = region_and_path.split('.amazonaws.com/')[1] if '.amazonaws.com/' in region_and_path else None
-            elif thumbnail_to_delete.startswith('https://'):
-                # Handle direct S3 URL format
-                url_parts = thumbnail_to_delete.split('/')
-                if len(url_parts) >= 4 and 's3' in url_parts[2]:
-                    thumbnail_s3_key = '/'.join(url_parts[3:])
+            thumbnail_s3_key = extract_s3_key_from_url(thumbnail_to_delete)
             
             if thumbnail_s3_key:
                 logger.info(f"Extracted thumbnail S3 key: {thumbnail_s3_key}")
@@ -1178,6 +1155,195 @@ def delete_panorama(gallery_id: str, payload: dict):
     except Exception as e:
         logger.error(f"Error deleting panorama: {str(e)}")
         return create_response(500, {'error': 'Failed to delete panorama', 'details': str(e)})
+
+
+def extract_s3_key_from_url(url: str):
+    """Extract object key from a public/presigned S3 HTTPS URL for this bucket."""
+    if not url or not isinstance(url, str):
+        return None
+    url = url.strip().split('?')[0]
+    s3_key = None
+
+    # Virtual-hosted with region: bucket.s3.eu-north-1.amazonaws.com/key
+    if f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/' in url:
+        s3_key = url.split(f'{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/', 1)[1]
+    # Legacy virtual-hosted without region: bucket.s3.amazonaws.com/key
+    elif f'{BUCKET_NAME}.s3.amazonaws.com/' in url:
+        s3_key = url.split(f'{BUCKET_NAME}.s3.amazonaws.com/', 1)[1]
+    # Other regional hosts: bucket.s3.<region>.amazonaws.com/key
+    elif f'{BUCKET_NAME}.s3.' in url and '.amazonaws.com/' in url:
+        marker = '.amazonaws.com/'
+        s3_key = url.split(marker, 1)[1]
+    # Path-style: s3.<region>.amazonaws.com/bucket/key or s3.amazonaws.com/bucket/key
+    elif url.startswith('https://') or url.startswith('http://'):
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.netloc or '').lower()
+        path = (parsed.path or '').lstrip('/')
+        if host.startswith('s3.') and 'amazonaws.com' in host:
+            prefix = f'{BUCKET_NAME}/'
+            if path.startswith(prefix):
+                s3_key = path[len(prefix):]
+            elif path:
+                s3_key = path
+        elif BUCKET_NAME in host and path:
+            s3_key = path
+
+    if not s3_key:
+        return None
+    # DynamoDB often stores percent-encoded paths (e.g. 川西 -> %E5%B7%9D%E8%A5%BF);
+    # S3 object keys use the decoded Unicode path.
+    return urllib.parse.unquote(s3_key)
+
+
+def build_s3_public_url(s3_key: str, template_url: str = None):
+    """Build a public HTTPS URL for an S3 key, percent-encoding non-ASCII path segments."""
+    encoded_key = urllib.parse.quote(s3_key, safe='/')
+    if template_url:
+        parsed = urllib.parse.urlparse(template_url.split('?')[0])
+        if parsed.scheme and parsed.netloc:
+            return f'{parsed.scheme}://{parsed.netloc}/{encoded_key}'
+    return f'https://{BUCKET_NAME}.s3.eu-north-1.amazonaws.com/{encoded_key}'
+
+
+def sanitize_panorama_filename(name: str) -> str:
+    """Sanitize a panorama filename; always returns a safe basename with an image extension."""
+    name = (name or '').strip()
+    name = os.path.basename(name.replace('\\', '/'))
+    name = urllib.parse.unquote(name)
+    name = re.sub(r'[<>:"|?*\x00-\x1f]', '', name).strip(' .')
+    if not name:
+        raise ValueError('Filename cannot be empty')
+    lower = name.lower()
+    if not lower.endswith(('.webp', '.jpg', '.jpeg', '.png')):
+        name = f'{name}.webp'
+    if name in ('.', '..') or '/' in name or '\\' in name:
+        raise ValueError('Invalid filename')
+    return name
+
+
+def rename_panorama(gallery_id: str, payload: dict):
+    """
+    Rename a panorama (and its thumbnail) in S3 and update DynamoDB URLs.
+    Body: { panoramaIndex: number, newFilename: string }
+    """
+    try:
+        panorama_index = payload.get('panoramaIndex')
+        new_filename = payload.get('newFilename') or payload.get('filename')
+
+        if panorama_index is None:
+            return create_response(400, {'error': 'panoramaIndex required'})
+        try:
+            panorama_index = int(panorama_index)
+        except (TypeError, ValueError):
+            return create_response(400, {'error': 'Invalid panoramaIndex'})
+
+        try:
+            new_filename = sanitize_panorama_filename(new_filename)
+        except ValueError as e:
+            return create_response(400, {'error': str(e)})
+
+        gallery_response = tbl_galleries.get_item(Key={'galleryId': str(gallery_id)})
+        if 'Item' not in gallery_response:
+            return create_response(404, {'error': 'Gallery not found'})
+
+        gallery = gallery_response['Item']
+        panorama_urls = list(gallery.get('panoramaURL', []) or [])
+        panorama_thumbnails = list(gallery.get('panoThumbnail', []) or [])
+
+        if panorama_index < 0 or panorama_index >= len(panorama_urls):
+            return create_response(400, {'error': 'Invalid panorama index'})
+
+        old_url = panorama_urls[panorama_index]
+        old_key = extract_s3_key_from_url(old_url)
+        if not old_key:
+            return create_response(400, {'error': 'Could not parse panorama S3 key from URL'})
+
+        old_filename = old_key.rsplit('/', 1)[-1]
+        if old_filename == new_filename:
+            return create_response(200, {
+                'message': 'Filename unchanged',
+                'panoramaURL': old_url,
+                'panoThumbnail': panorama_thumbnails[panorama_index] if panorama_index < len(panorama_thumbnails) else None,
+                'filename': new_filename
+            })
+
+        # Reject duplicate names in the same gallery folder
+        for i, url in enumerate(panorama_urls):
+            if i == panorama_index:
+                continue
+            other_key = extract_s3_key_from_url(url) or ''
+            if other_key.rsplit('/', 1)[-1] == new_filename:
+                return create_response(400, {'error': f'Filename already exists: {new_filename}'})
+
+        folder = old_key.rsplit('/', 1)[0]
+        new_key = f'{folder}/{new_filename}'
+
+        # Copy then delete original
+        try:
+            s3_client.copy_object(
+                Bucket=BUCKET_NAME,
+                Key=new_key,
+                CopySource={'Bucket': BUCKET_NAME, 'Key': old_key},
+                MetadataDirective='COPY'
+            )
+            s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+        except ClientError as e:
+            logger.error(f"Failed to rename panorama object {old_key} -> {new_key}: {e}")
+            return create_response(500, {'error': 'Failed to rename panorama in S3', 'details': str(e)})
+
+        new_url = build_s3_public_url(new_key, old_url)
+        panorama_urls[panorama_index] = new_url
+
+        new_thumb_url = None
+        if panorama_index < len(panorama_thumbnails) and panorama_thumbnails[panorama_index]:
+            old_thumb_url = panorama_thumbnails[panorama_index]
+            old_thumb_key = extract_s3_key_from_url(old_thumb_url)
+            if old_thumb_key:
+                old_base = old_filename.rsplit('.', 1)[0]
+                new_base = new_filename.rsplit('.', 1)[0]
+                thumb_name = old_thumb_key.rsplit('/', 1)[-1]
+                # Prefer replacing known "{base}_thumb.ext" pattern; else rebuild
+                if thumb_name.startswith(f'{old_base}_thumb'):
+                    new_thumb_name = thumb_name.replace(f'{old_base}_thumb', f'{new_base}_thumb', 1)
+                else:
+                    new_thumb_name = f'{new_base}_thumb.webp'
+                thumb_folder = old_thumb_key.rsplit('/', 1)[0]
+                new_thumb_key = f'{thumb_folder}/{new_thumb_name}'
+                try:
+                    s3_client.copy_object(
+                        Bucket=BUCKET_NAME,
+                        Key=new_thumb_key,
+                        CopySource={'Bucket': BUCKET_NAME, 'Key': old_thumb_key},
+                        MetadataDirective='COPY'
+                    )
+                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=old_thumb_key)
+                    new_thumb_url = build_s3_public_url(new_thumb_key, old_thumb_url)
+                    panorama_thumbnails[panorama_index] = new_thumb_url
+                except ClientError as e:
+                    logger.warning(f"Failed to rename panorama thumbnail {old_thumb_key}: {e}")
+
+        now_ts = datetime.utcnow().isoformat() + 'Z'
+        tbl_galleries.update_item(
+            Key={'galleryId': str(gallery_id)},
+            UpdateExpression="SET panoramaURL = :panorama_urls, panoThumbnail = :panorama_thumbnails, updatedAt = :now",
+            ExpressionAttributeValues={
+                ':panorama_urls': panorama_urls,
+                ':panorama_thumbnails': panorama_thumbnails,
+                ':now': now_ts
+            }
+        )
+
+        logger.info(f"Renamed panorama {panorama_index} in gallery {gallery_id}: {old_filename} -> {new_filename}")
+        return create_response(200, {
+            'message': 'Panorama renamed successfully',
+            'filename': new_filename,
+            'panoramaURL': new_url,
+            'panoThumbnail': panorama_thumbnails[panorama_index] if panorama_index < len(panorama_thumbnails) else new_thumb_url,
+            'panoramaIndex': panorama_index
+        })
+    except Exception as e:
+        logger.error(f"Error renaming panorama: {str(e)}")
+        return create_response(500, {'error': 'Failed to rename panorama', 'details': str(e)})
 
 
 def format_file_size(bytes_size):
